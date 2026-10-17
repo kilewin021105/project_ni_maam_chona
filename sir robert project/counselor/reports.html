@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Counselor Reports — BCC Guidance Appointment System</title>
+  <link rel="icon" type="image/png" href="../pictures/BCC_logo.png">
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <!-- Core Stylesheets -->
+  <link rel="stylesheet" href="../css/variables.css">
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/layout.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <link rel="stylesheet" href="../css/views.css">
+</head>
+<body>
+
+  <div class="app-shell" id="app-layout">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <aside class="sidebar" id="app-sidebar" aria-label="Sidebar Navigation">
+      <div class="sidebar-header">
+        <div class="sidebar-logo-wrap">
+          <img src="../pictures/BCC_logo.png" alt="BCC Logo" class="sidebar-logo">
+        </div>
+        <div class="sidebar-school-name">
+          <div class="line1">BUENAVISTA C.C.</div>
+          <div class="line2">Guidance Office</div>
+        </div>
+      </div>
+
+      <div class="sidebar-user">
+        <div class="sidebar-avatar counselor">M</div>
+        <div class="sidebar-user-info">
+          <div class="sidebar-user-name">Maria Santos</div>
+          <div class="sidebar-user-role">GUIDANCE COUNSELOR</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-group-label">Counselor Portal</div>
+        <a href="dashboard.html" class="nav-item">
+          <span id="nav-icon-dash"></span>
+          <span>Dashboard</span>
+        </a>
+        <a href="appointments.html" class="nav-item">
+          <span id="nav-icon-queue"></span>
+          <span>Appointment Queue</span>
+        </a>
+        <a href="schedule.html" class="nav-item">
+          <span id="nav-icon-sched"></span>
+          <span>My Schedule</span>
+        </a>
+        <a href="notes.html" class="nav-item">
+          <span id="nav-icon-notes"></span>
+          <span>SOAP Case Notes</span>
+        </a>
+        <a href="followups.html" class="nav-item">
+          <span id="nav-icon-follow"></span>
+          <span>Follow-Up Tracker</span>
+        </a>
+        <a href="reports.html" class="nav-item active">
+          <span id="nav-icon-rep"></span>
+          <span>Counselor Reports</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-footer-logo">
+          <img src="../pictures/BSIT_logo.png" alt="BSIT Logo">
+          <span>BCC • Bohol</span>
+        </div>
+        <button class="btn-sidebar-logout" title="Sign Out">
+          <span id="icon-logout"></span>
+        </button>
+      </div>
+    </aside>
+
+    <div class="main-area" id="app-main">
+      <header class="topbar" id="app-topbar">
+        <div class="topbar-left">
+          <button class="btn-mobile-menu" aria-label="Open navigation menu">
+            <span id="icon-menu"></span>
+          </button>
+          <div>
+            <div class="topbar-title">Counselor Reports</div>
+            <div class="topbar-subtitle">Performance, caseload metrics, and session summaries</div>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <div class="topbar-search">
+            <span id="icon-search"></span>
+            <input type="text" placeholder="Search...">
+          </div>
+
+          <div style="position: relative;">
+            <button class="topbar-icon-btn" id="topbar-notif-btn" title="Notifications">
+              <span id="icon-bell"></span>
+              <span class="notif-indicator"></span>
+            </button>
+            <div class="notif-dropdown" id="topbar-notif-popover">
+              <div class="notif-head">
+                <span>Notifications</span>
+                <span class="badge badge-brand">New</span>
+              </div>
+              <div class="notif-list"></div>
+            </div>
+          </div>
+
+          <div class="topbar-user">
+            <div class="topbar-avatar counselor">M</div>
+            <div class="topbar-user-info">
+              <div class="u-name">Maria Santos</div>
+              <div class="u-role">COUNSELOR</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="page-content" id="main-content" role="main">
+        <div class="page-container fade-in">
+          
+          <div style="margin-bottom: 1.5rem;">
+            <h2 style="font-size: var(--text-2xl); font-weight: 800; color: var(--slate-900);">Counselor Caseload & Session Analytics</h2>
+            <p style="font-size: var(--text-sm); color: var(--slate-500); margin-top: 2px;">Monthly overview of consultations conducted for Academic Year 2026.</p>
+          </div>
+
+          <!-- 3 Stats Cards -->
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-bottom: 1.5rem;">
+            <div class="card text-center">
+              <h4 style="font-size: 2.25rem; color: var(--bcc-brand); font-weight: 800; line-height: 1.1;">48</h4>
+              <div class="text-xs text-muted" style="margin-top: 0.35rem; font-weight: 700;">Total Consultations Completed</div>
+            </div>
+            <div class="card text-center">
+              <h4 style="font-size: 2.25rem; color: #3b82f6; font-weight: 800; line-height: 1.1;">14</h4>
+              <div class="text-xs text-muted" style="margin-top: 0.35rem; font-weight: 700;">Academic Advisory Sessions</div>
+            </div>
+            <div class="card text-center">
+              <h4 style="font-size: 2.25rem; color: #059669; font-weight: 800; line-height: 1.1;">22</h4>
+              <div class="text-xs text-muted" style="margin-top: 0.35rem; font-weight: 700;">Mental Health Care Sessions</div>
+            </div>
+          </div>
+
+          <!-- Monthly Distribution Table -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <span id="icon-card-chart"></span> Service Category Distribution
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Service Category</th>
+                    <th>Conducted Sessions</th>
+                    <th>Average Duration</th>
+                    <th>Resolution Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="font-bold">Career Guidance & Placement</td>
+                    <td>12 sessions</td>
+                    <td>45 mins</td>
+                    <td><span class="badge badge-confirmed">98% Satisfied</span></td>
+                  </tr>
+                  <tr>
+                    <td class="font-bold">Academic Problem Solving</td>
+                    <td>14 sessions</td>
+                    <td>40 mins</td>
+                    <td><span class="badge badge-confirmed">95% Satisfied</span></td>
+                  </tr>
+                  <tr>
+                    <td class="font-bold">Personal Counseling</td>
+                    <td>10 sessions</td>
+                    <td>50 mins</td>
+                    <td><span class="badge badge-confirmed">100% Satisfied</span></td>
+                  </tr>
+                  <tr>
+                    <td class="font-bold">Crisis & Urgent Intervention</td>
+                    <td>4 sessions</td>
+                    <td>60 mins</td>
+                    <td><span class="badge badge-confirmed">100% Handled</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="../js/icons.js"></script>
+  <script src="../js/data.js"></script>
+  <script src="../js/storage.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/components/toast.js"></script>
+  <script src="../js/components/modal.js"></script>
+  <script src="../js/portal.js"></script>
+  <script src="counselor.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const setIcon = (id, icon) => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = Icons.get(icon);
+      };
+
+      setIcon('nav-icon-dash', 'grid');
+      setIcon('nav-icon-queue', 'clock');
+      setIcon('nav-icon-sched', 'calendar');
+      setIcon('nav-icon-notes', 'file-text');
+      setIcon('nav-icon-follow', 'heart');
+      setIcon('nav-icon-rep', 'barChart');
+      setIcon('icon-logout', 'logOut');
+      setIcon('icon-menu', 'menu');
+      setIcon('icon-search', 'search');
+      setIcon('icon-bell', 'bell');
+      setIcon('icon-card-chart', 'barChart');
+
+      CounselorController.initReports();
+    });
+  </script>
+</body>
+</html>

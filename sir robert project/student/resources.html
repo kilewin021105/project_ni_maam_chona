@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guidance Resources — BCC Student Portal</title>
+  <link rel="icon" type="image/png" href="../pictures/BCC_logo.png">
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <!-- Core Stylesheets -->
+  <link rel="stylesheet" href="../css/variables.css">
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/layout.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <link rel="stylesheet" href="../css/views.css">
+</head>
+<body>
+
+  <div class="app-shell" id="app-layout">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <aside class="sidebar" id="app-sidebar" aria-label="Sidebar Navigation">
+      <div class="sidebar-header">
+        <div class="sidebar-logo-wrap">
+          <img src="../pictures/BCC_logo.png" alt="BCC Logo" class="sidebar-logo">
+        </div>
+        <div class="sidebar-school-name">
+          <div class="line1">BUENAVISTA C.C.</div>
+          <div class="line2">Guidance Office</div>
+        </div>
+      </div>
+
+      <div class="sidebar-user">
+        <div class="sidebar-avatar student">J</div>
+        <div class="sidebar-user-info">
+          <div class="sidebar-user-name">Juan Dela Cruz</div>
+          <div class="sidebar-user-role">STUDENT • BSIT 3A</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-group-label">Student Portal</div>
+        <a href="dashboard.html" class="nav-item">
+          <span id="nav-icon-dash"></span>
+          <span>Dashboard</span>
+        </a>
+        <a href="services.html" class="nav-item">
+          <span id="nav-icon-srv"></span>
+          <span>Guidance Services</span>
+        </a>
+        <a href="book.html" class="nav-item">
+          <span id="nav-icon-book"></span>
+          <span>Book Appointment</span>
+        </a>
+        <a href="appointments.html" class="nav-item">
+          <span id="nav-icon-apts"></span>
+          <span>Appointment Queue</span>
+        </a>
+        <a href="resources.html" class="nav-item active">
+          <span id="nav-icon-res"></span>
+          <span>Guidance Resources</span>
+        </a>
+        <a href="history.html" class="nav-item">
+          <span id="nav-icon-hist"></span>
+          <span>Counseling History</span>
+        </a>
+        <a href="profile.html" class="nav-item">
+          <span id="nav-icon-prof"></span>
+          <span>Student Profile</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-footer-logo">
+          <img src="../pictures/BSIT_logo.png" alt="BSIT Logo">
+          <span>BCC • Bohol</span>
+        </div>
+        <button class="btn-sidebar-logout" title="Sign Out">
+          <span id="icon-logout"></span>
+        </button>
+      </div>
+    </aside>
+
+    <div class="main-area" id="app-main">
+      <header class="topbar" id="app-topbar">
+        <div class="topbar-left">
+          <button class="btn-mobile-menu" aria-label="Open navigation menu">
+            <span id="icon-menu"></span>
+          </button>
+          <div>
+            <div class="topbar-title">Student Guidance Resources</div>
+            <div class="topbar-subtitle">Self-help materials, study skills, mental wellness &amp; career guidance</div>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <div class="topbar-search">
+            <span id="icon-search"></span>
+            <input type="text" id="resource-search-input" placeholder="Search guides, topics...">
+          </div>
+
+          <div style="position: relative;">
+            <button class="topbar-icon-btn" id="topbar-notif-btn" title="Notifications">
+              <span id="icon-bell"></span>
+              <span class="notif-indicator"></span>
+            </button>
+            <div class="notif-dropdown" id="topbar-notif-popover">
+              <div class="notif-head">
+                <span>Notifications</span>
+                <span class="badge badge-brand">New</span>
+              </div>
+              <div class="notif-list"></div>
+            </div>
+          </div>
+
+          <div class="topbar-user">
+            <div class="topbar-avatar student">J</div>
+            <div class="topbar-user-info">
+              <div class="u-name">Juan Dela Cruz</div>
+              <div class="u-role">STUDENT</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="page-content" id="main-content" role="main">
+        <div class="page-container fade-in">
+
+          <div class="flex justify-between items-center" style="margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h2 style="font-size: var(--text-2xl); font-weight: 800; color: var(--slate-900);">Guidance Resources Library</h2>
+              <p style="font-size: var(--text-sm); color: var(--slate-500); margin-top: 2px;">
+                Authorized materials prepared by BCC Guidance Counselors to assist your college journey.
+              </p>
+            </div>
+
+            <!-- Category Filter Tabs -->
+            <div class="filter-tabs">
+              <button class="filter-tab-btn active" data-cat="All">All Resources</button>
+              <button class="filter-tab-btn" data-cat="Study Skills">Study Skills</button>
+              <button class="filter-tab-btn" data-cat="Mental Wellness">Mental Wellness</button>
+              <button class="filter-tab-btn" data-cat="Career Guidance">Career Guidance</button>
+            </div>
+          </div>
+
+          <!-- Resources Cards Grid -->
+          <div class="services-grid" id="resources-grid" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
+            <!-- Injected via JavaScript -->
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="../js/icons.js"></script>
+  <script src="../js/data.js"></script>
+  <script src="../js/storage.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/components/toast.js"></script>
+  <script src="../js/components/modal.js"></script>
+  <script src="../js/portal.js"></script>
+  <script src="student.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const setIcon = (id, icon) => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = Icons.get(icon);
+      };
+
+      setIcon('nav-icon-dash', 'grid');
+      setIcon('nav-icon-srv', 'book-open');
+      setIcon('nav-icon-book', 'plus');
+      setIcon('nav-icon-apts', 'clock');
+      setIcon('nav-icon-res', 'file-text');
+      setIcon('nav-icon-hist', 'clipboard');
+      setIcon('nav-icon-prof', 'user');
+      setIcon('icon-logout', 'logOut');
+      setIcon('icon-menu', 'menu');
+      setIcon('icon-search', 'search');
+      setIcon('icon-bell', 'bell');
+
+      StudentController.initResources();
+    });
+  </script>
+</body>
+</html>

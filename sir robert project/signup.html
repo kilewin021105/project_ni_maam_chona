@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Registration — BUENAVISTA COMMUNITY COLLEGE Guidance System</title>
+  <meta name="description" content="Create a new student guidance counseling account at Buenavista Community College">
+
+  <!-- Favicon / Logos -->
+  <link rel="icon" type="image/png" href="pictures/BCC_logo.png">
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <!-- Core Stylesheets -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/views.css">
+
+  <style>
+    .signup-page-wrapper {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, rgba(6, 61, 46, 0.95), rgba(2, 32, 24, 0.98)), url('pictures/background.jpg') center/cover no-repeat;
+      padding: 2.5rem 1.5rem;
+    }
+
+    .signup-card {
+      background: #ffffff;
+      border-radius: var(--r-lg);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      width: 100%;
+      max-width: 680px;
+      overflow: hidden;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .signup-header {
+      background: var(--bcc-dark);
+      padding: 2.25rem 2rem 1.75rem;
+      text-align: center;
+      color: #ffffff;
+      border-bottom: 3px solid var(--bcc-brand);
+    }
+
+    .signup-logo {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      padding: 4px;
+      margin: 0 auto 0.75rem;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .signup-body {
+      padding: 2rem 2.5rem;
+    }
+
+    .form-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+    }
+
+    @media (max-width: 640px) {
+      .form-grid-2 {
+        grid-template-columns: 1fr;
+        gap: 0.85rem;
+      }
+      .signup-body {
+        padding: 1.5rem 1.25rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="signup-page-wrapper">
+    <div class="signup-card">
+      
+      <!-- Institutional Card Header -->
+      <div class="signup-header">
+        <img src="pictures/BCC_logo.png" alt="BCC Seal" class="signup-logo">
+        <h1 style="font-size: 1.25rem; font-weight: 800; letter-spacing: 0.02em; color: #ffffff;">BUENAVISTA COMMUNITY COLLEGE</h1>
+        <p style="font-size: 11px; color: var(--bcc-bright); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 3px;">
+          Center for Student Development & Guidance Services
+        </p>
+        <div style="font-size: var(--text-sm); color: var(--slate-300); margin-top: 0.5rem; font-weight: 500;">
+          New Student Account Registration
+        </div>
+      </div>
+
+      <!-- Registration Form Body -->
+      <div class="signup-body">
+        
+        <form id="signup-form">
+          
+          <!-- Name & Student ID -->
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label required" for="su-name">Full Student Name</label>
+              <input type="text" id="su-name" class="form-input" placeholder="e.g. Juan P. Dela Cruz" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label required" for="su-id">Student ID Number</label>
+              <input type="text" id="su-id" class="form-input" placeholder="e.g. BCC-2024-01048" required>
+            </div>
+          </div>
+
+          <!-- Course & Year Section -->
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label required" for="su-course">College Program / Degree</label>
+              <select id="su-course" class="form-select" required>
+                <option value="BSIT" selected>BSIT - Bachelor of Science in Information Technology</option>
+                <option value="BSHM">BSHM - Bachelor of Science in Hospitality Management</option>
+                <option value="BSTM">BSTM - Bachelor of Science in Tourism Management</option>
+                <option value="BSCRIM">BSCRIM - Bachelor of Science in Criminal Justice</option>
+                <option value="BSED">BSED - Bachelor of Secondary Education</option>
+                <option value="BEED">BEED - Bachelor of Elementary Education</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label required" for="su-year">Year & Section</label>
+              <input type="text" id="su-year" class="form-input" placeholder="e.g. 3A" required>
+            </div>
+          </div>
+
+          <!-- Email & Phone -->
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label required" for="su-email">BCC Email Address</label>
+              <input type="email" id="su-email" class="form-input" placeholder="e.g. juan.delacruz@buenavista.edu.ph" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label required" for="su-phone">Contact Number</label>
+              <input type="tel" id="su-phone" class="form-input" placeholder="e.g. 0917-555-0192" required>
+            </div>
+          </div>
+
+          <!-- Emergency Contact -->
+          <div class="form-group">
+            <label class="form-label required" for="su-emergency">Emergency Contact (Parent / Guardian Name & Phone)</label>
+            <input type="text" id="su-emergency" class="form-input" placeholder="e.g. Maria Dela Cruz (Mother) - 0918-555-0199" required>
+          </div>
+
+          <!-- Password & Confirm Password -->
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label required" for="su-password">Password</label>
+              <div class="input-with-action">
+                <input type="password" id="su-password" class="form-input" placeholder="Minimum 6 characters" minlength="6" required>
+                <button type="button" class="btn-input-toggle" id="btn-toggle-su-pwd">Show</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label required" for="su-confirm-password">Confirm Password</label>
+              <div class="input-with-action">
+                <input type="password" id="su-confirm-password" class="form-input" placeholder="Re-enter password" minlength="6" required>
+                <button type="button" class="btn-input-toggle" id="btn-toggle-su-cpwd">Show</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Privacy Policy Agreement -->
+          <div style="margin: 1.25rem 0 1.5rem; background: var(--bg-muted); padding: 0.85rem 1rem; border-radius: var(--r-md); border: 1px solid var(--border);">
+            <label class="flex items-start gap-2 cursor-pointer" style="font-size: var(--text-xs); line-height: 1.5;">
+              <input type="checkbox" id="su-privacy-check" required style="margin-top: 3px;">
+              <span>
+                I agree to the <strong>BCC Guidance Office Confidentiality and Data Privacy Policy</strong> in accordance with Republic Act 10173 (Data Privacy Act) and Republic Act 9258 (Guidance and Counseling Act).
+              </span>
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-lg w-full" id="btn-submit-signup">
+            Create Student Account &rarr;
+          </button>
+        </form>
+
+        <!-- Divider Links -->
+        <div style="margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid var(--border-light); text-align: center; font-size: var(--text-sm);">
+          <p class="text-muted" style="margin-bottom: 0.75rem;">
+            Already have a registered account? 
+            <a href="login.html" style="font-weight: 800; color: var(--bcc-brand); text-decoration: underline;">
+              Sign In to Portal
+            </a>
+          </p>
+          <a href="index.html" style="font-size: var(--text-xs); color: var(--slate-500); font-weight: 600;">
+            &larr; Return to Public College Homepage
+          </a>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Scripts in Proper Dependency Order -->
+  <script src="js/icons.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/components/toast.js"></script>
+  <script src="js/components/modal.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      StorageService.init();
+
+      const form = document.getElementById('signup-form');
+      const submitBtn = document.getElementById('btn-submit-signup');
+
+      // Password visibility toggles
+      const setupToggle = (btnId, inputId) => {
+        const btn = document.getElementById(btnId);
+        const input = document.getElementById(inputId);
+        if (btn && input) {
+          btn.addEventListener('click', () => {
+            if (input.type === 'password') {
+              input.type = 'text';
+              btn.textContent = 'Hide';
+            } else {
+              input.type = 'password';
+              btn.textContent = 'Show';
+            }
+          });
+        }
+      };
+
+      setupToggle('btn-toggle-su-pwd', 'su-password');
+      setupToggle('btn-toggle-su-cpwd', 'su-confirm-password');
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const name = document.getElementById('su-name').value.trim();
+        const studentId = document.getElementById('su-id').value.trim();
+        const course = document.getElementById('su-course').value;
+        const yearSection = document.getElementById('su-year').value.trim();
+        const email = document.getElementById('su-email').value.trim();
+        const phone = document.getElementById('su-phone').value.trim();
+        const emergencyContact = document.getElementById('su-emergency').value.trim();
+        const password = document.getElementById('su-password').value;
+        const confirmPassword = document.getElementById('su-confirm-password').value;
+        const privacyChecked = document.getElementById('su-privacy-check').checked;
+
+        if (!privacyChecked) {
+          Toast.warning('Privacy Agreement', 'Please accept the data privacy policy to continue.');
+          return;
+        }
+
+        if (password !== confirmPassword) {
+          Toast.error('Password Mismatch', 'The passwords you entered do not match. Please re-enter.');
+          return;
+        }
+
+        if (!name || !studentId || !email || !password) {
+          Toast.warning('Required Fields', 'Please complete all required fields.');
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Registering Account...';
+
+        try {
+          const newUser = await ApiClient.registerStudent({
+            name,
+            studentId,
+            student_id_number: studentId,
+            course,
+            yearSection,
+            year_section: yearSection,
+            email,
+            phone,
+            emergencyContact,
+            emergency_contact: emergencyContact,
+            password
+          });
+
+          // Ensure session is set
+          StorageService.setCurrentUser(newUser);
+
+          Toast.success('Registration Successful', `Welcome to BCC Guidance System, ${newUser.name}!`);
+
+          setTimeout(() => {
+            window.location.href = 'student/dashboard.html';
+          }, 600);
+        } catch (err) {
+          Toast.error('Registration Error', err.message || 'Unable to register account.');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Create Student Account →';
+        }
+      });
+    });
+  </script>
+</body>
+</html>

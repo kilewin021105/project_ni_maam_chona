@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — BUENAVISTA COMMUNITY COLLEGE Guidance System</title>
+  <meta name="description" content="Sign In to Buenavista Community College Guidance Appointment and Counseling Portal">
+
+  <!-- Favicon / Logos -->
+  <link rel="icon" type="image/png" href="pictures/BCC_logo.png">
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <!-- Core Stylesheets -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/views.css">
+
+  <style>
+    .auth-page-wrapper {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, rgba(6, 61, 46, 0.96), rgba(2, 32, 24, 0.98)), url('pictures/background.jpg') center/cover no-repeat;
+      padding: 2.5rem 1.5rem;
+    }
+
+    .auth-card {
+      background: #ffffff;
+      border-radius: var(--r-lg);
+      box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      width: 100%;
+      max-width: 480px;
+      overflow: hidden;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .auth-header {
+      background: var(--bcc-dark);
+      padding: 2.25rem 2rem 1.75rem;
+      text-align: center;
+      color: #ffffff;
+      border-bottom: 3px solid var(--bcc-brand);
+    }
+
+    .auth-logo {
+      width: 68px;
+      height: 68px;
+      object-fit: contain;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      padding: 4px;
+      margin: 0 auto 0.85rem;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .auth-body {
+      padding: 2.25rem 2.5rem;
+    }
+
+    @media (max-width: 480px) {
+      .auth-body {
+        padding: 1.75rem 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="auth-page-wrapper">
+    <div class="auth-card">
+      
+      <!-- Institutional Card Header -->
+      <div class="auth-header">
+        <img src="pictures/BCC_logo.png" alt="BCC Seal" class="auth-logo">
+        <h1 style="font-size: 1.25rem; font-weight: 800; letter-spacing: 0.02em; color: #ffffff;">BUENAVISTA COMMUNITY COLLEGE</h1>
+        <p style="font-size: 11px; color: var(--bcc-bright); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 3px;">
+          Center for Student Development & Guidance Services
+        </p>
+        <div style="font-size: var(--text-sm); color: var(--slate-300); margin-top: 0.5rem; font-weight: 500;">
+          Guidance Portal Authorization
+        </div>
+      </div>
+
+      <!-- Card Form Body -->
+      <div class="auth-body">
+
+        <!-- Credentials Sign In Form -->
+        <form id="login-form">
+          <div class="form-group">
+            <label class="form-label required" for="login-email">BCC Institutional Email</label>
+            <input type="email" id="login-email" class="form-input" placeholder="e.g. yourname@buenavista.edu.ph" required autocomplete="username">
+          </div>
+
+          <div class="form-group">
+            <div class="flex justify-between items-center" style="margin-bottom: 0.35rem;">
+              <label class="form-label required" for="login-password" style="margin-bottom: 0;">Password</label>
+              <a href="#" id="link-forgot-password" style="font-size: 11px; font-weight: 700; color: var(--bcc-brand);">Forgot Password?</a>
+            </div>
+            <div class="input-with-action">
+              <input type="password" id="login-password" class="form-input" placeholder="Enter your password" required autocomplete="current-password">
+              <button type="button" id="btn-toggle-pwd" class="btn-input-toggle">
+                Show
+              </button>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center" style="margin: 1.25rem 0 1.5rem; font-size: var(--text-xs);">
+            <label class="flex items-center gap-2 cursor-pointer" style="user-select: none;">
+              <input type="checkbox" id="remember-me" checked style="accent-color: var(--bcc-brand); width: 15px; height: 15px;">
+              <span class="text-muted" style="font-weight: 500;">Keep me signed in</span>
+            </label>
+            <span style="color: var(--slate-400); font-weight: 600;">🔒 SSL Encrypted</span>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-lg w-full" id="btn-submit-login">
+            Sign In to Portal &rarr;
+          </button>
+        </form>
+
+        <!-- Divider Links -->
+        <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border-light); text-align: center; font-size: var(--text-sm);">
+          <p class="text-muted" style="margin-bottom: 0.75rem;">
+            Don't have a guidance student account? 
+            <a href="signup.html" style="font-weight: 800; color: var(--bcc-brand); text-decoration: underline;">
+              Register as Student
+            </a>
+          </p>
+          <a href="index.html" style="font-size: var(--text-xs); color: var(--slate-500); font-weight: 600;">
+            &larr; Return to Public College Homepage
+          </a>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Scripts in Proper Dependency Order -->
+  <script src="js/icons.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/components/toast.js"></script>
+  <script src="js/components/modal.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      StorageService.init();
+
+      const form = document.getElementById('login-form');
+      const emailInput = document.getElementById('login-email');
+      const pwdInput = document.getElementById('login-password');
+      const togglePwdBtn = document.getElementById('btn-toggle-pwd');
+      const submitBtn = document.getElementById('btn-submit-login');
+
+      // Password visibility toggle
+      if (togglePwdBtn && pwdInput) {
+        togglePwdBtn.addEventListener('click', () => {
+          if (pwdInput.type === 'password') {
+            pwdInput.type = 'text';
+            togglePwdBtn.textContent = 'Hide';
+          } else {
+            pwdInput.type = 'password';
+            togglePwdBtn.textContent = 'Show';
+          }
+        });
+      }
+
+      // Submit Form
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = emailInput.value.trim();
+        const password = pwdInput.value;
+        await performLogin(email, password);
+      });
+
+      async function performLogin(email, password) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Authenticating...';
+
+        try {
+          const res = await ApiClient.login(email, password);
+          Toast.success('Login Successful', `Welcome back, ${res.user.name}!`);
+
+          setTimeout(() => {
+            if (res.user.role === 'student') {
+              window.location.href = 'student/dashboard.html';
+            } else if (res.user.role === 'counselor') {
+              window.location.href = 'counselor/dashboard.html';
+            } else if (res.user.role === 'admin') {
+              window.location.href = 'admin/dashboard.html';
+            } else {
+              window.location.href = 'student/dashboard.html';
+            }
+          }, 400);
+        } catch (err) {
+          Toast.error('Authentication Error', err.message || 'Invalid email or password.');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign In to Portal →';
+        }
+      }
+
+      // Forgot Password Modal
+      const forgotLink = document.getElementById('link-forgot-password');
+      if (forgotLink) {
+        forgotLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          Modal.confirm({
+            title: 'Password Recovery Assistance',
+            message: 'For security and confidentiality (RA 10173), student and staff account password resets must be verified through the BCC Guidance Office or Campus MIS. Would you like to use the demo default password (password123)?',
+            confirmText: 'Use Default (password123)',
+            cancelText: 'Cancel',
+            confirmType: 'btn-primary',
+            onConfirm: () => {
+              pwdInput.value = 'password123';
+              Toast.info('Password Filled', 'Default demo password filled.');
+            }
+          });
+        });
+      }
+    });
+  </script>
+</body>
+</html>

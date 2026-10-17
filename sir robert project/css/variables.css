@@ -1,0 +1,115 @@
+/* ==========================================================================
+   BUENAVISTA COMMUNITY COLLEGE — Copycat Design System Tokens
+   Color Theme: BCC Theme Green (#064e3b, #059669, #022c22)
+   ========================================================================== */
+
+:root {
+
+  /* ── BCC Theme Green Palette ── */
+  --bcc-darker:  #022018;
+  --bcc-dark:    #063d2e;  /* Sidebar & Dark Header Background */
+  --bcc-primary: #064e3b;  /* Primary Institutional Green */
+  --bcc-brand:   #059669;  /* Primary Button & Active Accent Green */
+  --bcc-light:   #10b981;  /* Vibrant Mint/Emerald */
+  --bcc-bright:  #34d399;
+  --bcc-soft:    #d1fae5;  /* Soft Green Tint */
+  --bcc-subtle:  #ecfdf5;  /* Light Background Surface Tint */
+
+  /* ── Status Colors ── */
+  --status-pending-bg:     #fef9c3;
+  --status-pending-text:   #854d0e;
+  --status-pending-border: #fde047;
+
+  --status-confirmed-bg:     #d1fae5;
+  --status-confirmed-text:   #065f46;
+  --status-confirmed-border: #6ee7b7;
+
+  --status-completed-bg:     #dbeafe;
+  --status-completed-text:   #1e40af;
+  --status-completed-border: #93c5fd;
+
+  --status-cancelled-bg:     #fee2e2;
+  --status-cancelled-text:   #991b1b;
+  --status-cancelled-border: #fca5a5;
+
+  /* ── Neutrals ── */
+  --slate-950: #091310;
+  --slate-900: #0f172a;
+  --slate-800: #1e293b;
+  --slate-700: #334155;
+  --slate-600: #475569;
+  --slate-500: #64748b;
+  --slate-400: #94a3b8;
+  --slate-300: #cbd5e1;
+  --slate-200: #e2e8f0;
+  --slate-100: #f1f5f9;
+  --slate-50:  #f8fafc;
+
+  /* ── UI Surfaces ── */
+  --bg-page:   #f4f6f8;
+  --bg-card:   #ffffff;
+  --bg-muted:  #f1f5f9;
+  --bg-subtle: #f8fafc;
+
+  /* ── Sidebar Tokens ── */
+  --sidebar-bg:           #063d2e;
+  --sidebar-border:       rgba(255, 255, 255, 0.08);
+  --sidebar-text:         #a7f3d0;
+  --sidebar-text-active:  #ffffff;
+  --sidebar-hover:        rgba(255, 255, 255, 0.08);
+  --sidebar-active-bg:    rgba(16, 185, 129, 0.22);
+  --sidebar-indicator:    #34d399;
+
+  /* ── Typography Scale ── */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --text-xs:   0.75rem;   /* 12px */
+  --text-sm:   0.8125rem; /* 13px */
+  --text-base: 0.9375rem; /* 15px */
+  --text-md:   1rem;      /* 16px */
+  --text-lg:   1.125rem;  /* 18px */
+  --text-xl:   1.25rem;   /* 20px */
+  --text-2xl:  1.5rem;    /* 24px */
+  --text-3xl:  1.875rem;  /* 30px */
+  --text-4xl:  2.25rem;   /* 36px */
+
+  /* ── Borders & Radii ── */
+  --border:       #e2e8f0;
+  --border-light: #f1f5f9;
+  --border-dark:  #cbd5e1;
+
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-full: 9999px;
+
+  /* ── Shadows ── */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 2px 4px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.07);
+  --shadow-lg: 0 10px 24px rgba(0,0,0,0.1);
+  --shadow-green: 0 4px 14px rgba(5, 150, 105, 0.35);
+
+  /* ── Dimensions ── */
+  --sidebar-w:     250px;
+  --topbar-h:      60px;
+  --content-max-w: 100%;
+
+  /* ── Transitions ── */
+  --t-fast: 0.15s ease;
+  --t-base: 0.22s ease;
+  --t-slow: 0.35s ease;
+
+  /* ── Z-Index ── */
+  --z-base:     1;
+  --z-sticky:   100;
+  --z-topbar:   200;
+  --z-sidebar:  300;
+  --z-overlay:  400;
+  --z-modal:    500;
+  --z-toast:    600;
+  --z-demo-bar: 700;
+}
