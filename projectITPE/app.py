@@ -11,8 +11,10 @@ app = create_app()
 if __name__ == '__main__':
     port = Config.PORT
     print("=" * 70)
-    print(" BUENAVISTA COMMUNITY COLLEGE — GUIDANCE SYSTEM API SERVER")
-    print(f" REST API:   http://127.0.0.1:{port}/api/v1")
-    print(f" Database:   {'Supabase Remote' if DBService.is_supabase() else 'SQLite Fallback'}")
+    print(" BUENAVISTA COMMUNITY COLLEGE — GUIDANCE SYSTEM")
+    print(f" Open in your browser:  http://127.0.0.1:{port}/")
+    if Config.HOST == '0.0.0.0':
+        print(f" On a phone (same Wi-Fi): http://<this-computer's-IP>:{port}/")
+    print(f" Database: {'Supabase Remote' if DBService.is_supabase() else 'SQLite (database/bcc_guidance.db)'}")
     print("=" * 70)
-    app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)
+    app.run(host=Config.HOST, port=port, debug=Config.DEBUG)

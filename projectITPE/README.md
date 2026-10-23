@@ -1,249 +1,141 @@
 # BUENAVISTA COMMUNITY COLLEGE (BCC)
 ## Guidance Appointment & Counseling Management System
 
-**Institution:** Buenavista Community College, Buenavista, Bohol, Philippines  
-**Department:** Center for Student Development & Guidance Services  
-**Technology Stack:** HTML5, CSS3, JavaScript (Multi-Page Architecture), Python Flask, Supabase (PostgreSQL) / SQLite  
+**Institution:** Buenavista Community College, Buenavista, Bohol, Philippines
+**Department:** Center for Student Development & Guidance Services
+**Technology Stack:** HTML5, CSS3, JavaScript (multi-page), Python Flask, SQLite (default) or Supabase (PostgreSQL)
 **Statutory Compliance:** Republic Act 10173 (Data Privacy Act of 2012) & Republic Act 9258 (Guidance and Counseling Act of 2004)
 
 ---
 
 ## 1. System Overview
 
-The **BCC Guidance Appointment and Counseling Management System** is a full-stack, enterprise-grade web application built to streamline student guidance appointment bookings, counselor caseload management, and administrative oversight for Buenavista Community College.
+A web application for booking guidance appointments, managing counselor caseloads, and overseeing the Guidance Office.
 
-### Core Roles & Architecture
-- **Student Portal (`student/`)**: Appointment booking wizard (5-step), appointment queue tracking, printable encrypted QR Pass Slips, post-counseling feedback (1-5 stars), guidance resources library, and profile contact management.
-- **Counselor Portal (`counselor/`)**: Daily schedule, appointment review queue (Approve / Reject / Propose Time), weekly slot availability manager, confidential Clinical SOAP Notes (Subjective, Objective, Assessment, Plan), and follow-up task tracking.
-- **Administrator Portal (`admin/`)**: Institutional analytics dashboard, user account management (Student, Counselor, Admin) with academic degree program filters, guidance service catalog management, master appointment oversight with CSV export, audit logs, and system policies.
+- **Student portal (`student/`)**: 5-step booking wizard with live time slots, appointment list with cancel and pass slip (scannable QR code), session rating after completed sessions, counseling history, guidance resource library with search, and contact details / password management.
+- **Counselor portal (`counselor/`)**: dashboard for today, own appointment queue (approve, reject with reason, reschedule, mark completed, cancel), monthly calendar with an availability editor (weekdays and daily limit), confidential SOAP notes for own students, follow-up tasks with in-app reminders to students, and a caseload report.
+- **Administrator portal (`admin/`)**: campus dashboard with a monthly chart, user accounts (create, edit, reset password, activate/deactivate, delete unused), guidance services (create, edit, set inactive, delete unused), all appointments with filters, cancel and CSV export, announcements with audience (everyone / students / counselors) and pinning, booking policy settings, campus report, and a searchable audit log.
+
+Every page gets its data from the Flask API. There is no offline or demo mode: if the server rejects an action, the page shows the server's error.
 
 ---
 
-## 2. Project Directory Structure
+## 2. Project Structure
 
 ```
-d:/sir robert project/
-├── index.html                        # Public Landing Page (Full-Width BCC Hero & Features)
-├── login.html                        # Dedicated Sign-In Page (Encrypted Auth & Routing)
-├── signup.html                       # Dedicated Student Registration (RA 10173/9258 Consent)
-├── account.text                      # Master Demo Accounts and Passwords Reference
-├── account.txt                       # Duplicate copy of credentials
-├── app.py                            # Python Backend Server Entry Point
-├── requirements.txt                  # Python Backend Dependencies
-├── pytest.ini                        # Automated Test Configuration
-├── .env.example                      # Supabase & Server Environment Template
-├── .env                              # Active Environment Configuration
-├── backend/                          # PYTHON FLASK BACKEND ENGINE
-│   ├── __init__.py                   # Package initialization
-│   ├── app.py                        # RESTful API Application (Auth, Appointments, SOAP, Admin)
-│   ├── config.py                     # Configuration loader (Supabase, JWT, Ports)
-│   ├── auth.py                       # Bcrypt password hashing & JWT role decorators
-│   └── database.py                   # Unified Data Access Layer (Supabase + SQLite Fallback)
-├── database/
-│   └── bcc_guidance.db               # Embedded SQLite Database (Auto-generated & Seeded)
+projectITPE/
+├── index.html, login.html, signup.html   Public pages
+├── app.py                                Start the server: python app.py
+├── requirements.txt, pytest.ini
+├── .env.example                          Settings template (copy to .env)
+├── backend/
+│   ├── app.py          REST API: every route checks login and role
+│   ├── auth.py         bcrypt passwords, JWT sessions, sign-in lockout
+│   ├── config.py       Settings from .env
+│   └── database.py     Data layer (SQLite or Supabase), safe transactions
+├── database/bcc_guidance.db              SQLite database (created and seeded on first run)
 ├── supabase/
-│   ├── schema.sql                    # Production PostgreSQL / Supabase Database Schema
-│   └── seed.sql                      # Production Supabase Seed Script
-├── tests/
-│   ├── __init__.py                   # Tests package initialization
-│   └── test_backend.py               # Comprehensive Pytest Suite (11/11 Tests Passing)
-├── css/                              # BCC DESIGN SYSTEM (Theme Green & Wide Layout)
-│   ├── variables.css                 # Color tokens, spacing, typography
-│   ├── base.css                      # Global resets and modern CSS resets
-│   ├── layout.css                    # Responsive wide-screen layout & CSS grid
-│   ├── components.css                # Polished textboxes, badges, buttons, modals
-│   └── views.css                     # Specialized portal views & table styling
-├── js/                               # CLIENT LOGIC & HYBRID REST CLIENT
-│   ├── icons.js                      # Scalable SVG Icon repository
-│   ├── data.js                       # Client-side seed models & degree programs
-│   ├── storage.js                    # LocalStorage persistent state manager
-│   ├── api.js                        # REST API Client with automatic offline fallback
-│   ├── portal.js                     # Shared session guard, logout controller, role barrier
-│   └── components/
-│       ├── toast.js                  # Toast notifications
-│       ├── modal.js                  # Accessible modals & Printable QR Pass Slip
-│       ├── calendar.js               # Interactive calendar widget
-│       └── charts.js                 # SVG analytics and caseload charts
-├── pictures/                         # INSTITUTIONAL BRAND ASSETS
-│   ├── background.jpg                # Campus hero background photography
-│   ├── BCC_logo.png                  # Official Buenavista Community College Seal
-│   └── BSIT_logo.png                 # BSIT Department Liaison Emblem
-├── student/                          # STUDENT MODULE (7 HTML Pages + Controller)
-│   ├── dashboard.html                # Metrics, upcoming appointment card, quick actions
-│   ├── services.html                 # Guidance services catalog
-│   ├── book.html                     # 5-Step interactive appointment booking wizard
-│   ├── appointments.html             # Appointment queue, status tabs, QR pass, feedback
-│   ├── resources.html                # Guidance resources library (Study skills, Wellness)
-│   ├── history.html                  # Past counseling session history
-│   ├── profile.html                  # Student academic details & contact updater
-│   └── student.js                    # Student event bindings & controller
-├── counselor/                        # COUNSELOR MODULE (6 HTML Pages + Controller)
-│   ├── dashboard.html                # Daily schedule, session counter, calendar widget
-│   ├── appointments.html             # Queue review (Approve / Reject / Pass Slip)
-│   ├── schedule.html                 # Weekly calendar & slot availability editor
-│   ├── notes.html                    # Clinical SOAP notes (RA 9258 / RA 10173 protected)
-│   ├── followups.html                # Student follow-up tasks tracker
-│   ├── reports.html                  # Caseload metrics and service utilization
-│   └── counselor.js                  # Counselor event bindings & controller
-└── admin/                            # ADMINISTRATOR MODULE (8 HTML Pages + Controller)
-    ├── dashboard.html                # Campus-wide executive metrics & trends
-    ├── users.html                    # User account management (+ Add User dialog)
-    ├── services.html                 # Guidance service catalog management
-    ├── appointments.html             # Master appointments log with CSV export
-    ├── announcements.html            # Campus guidance bulletin manager
-    ├── reports.html                  # Institutional analytics and reporting
-    ├── settings.html                 # Appointment lead times & system policies
-    ├── logs.html                     # Security audit logs (IP, timestamp, action)
-    └── admin.js                      # Admin event bindings & controller
+│   ├── schema.sql, seed.sql              New Supabase project
+│   ├── update_patch.sql                  Re-create tables/seed on an existing project
+│   └── security_patch.sql                Run once if you used an older version (see §4)
+├── tests/test_backend.py                 54 automated API tests
+├── css/                                  Design system (variables, base, layout, components, views)
+├── js/
+│   ├── utils.js        HTML escaping, dates, report helpers
+│   ├── storage.js      Session (token + profile only)
+│   ├── api.js          API client
+│   ├── portal.js       Session check, role guard, notifications, change password
+│   ├── icons.js
+│   ├── components/     modal.js (dialogs, pass slip), toast.js, calendar.js
+│   └── vendor/qrcode.min.js              QR code generator (qrcode-generator 1.4.4, MIT)
+├── student/   dashboard, services, book, appointments, resources, history, profile + student.js
+├── counselor/ dashboard, appointments, schedule, notes, followups, reports + counselor.js
+└── admin/     dashboard, users, services, appointments, announcements, reports, settings, logs + admin.js
 ```
+
+Only `index.html`, `login.html`, `signup.html` and the `css/`, `js/`, `pictures/`, `student/`, `counselor/` and `admin/` folders are served to browsers. The database, backend code, Supabase scripts, tests and `.env` can't be downloaded.
 
 ---
 
-## 3. Quick Start & Execution Instructions
+## 3. Running the System
 
-### A. Prerequisites
-- Python 3.10+ (tested with Python 3.12.10)
-- Modern web browser (Chrome, Edge, Firefox, Safari)
+**Requirements:** Python 3.10+ and a modern browser.
 
-### B. Installing Dependencies
-Open PowerShell or your preferred terminal in the project directory:
 ```powershell
 pip install -r requirements.txt
-```
-
-### C. Running the Unified Web Server
-Start the Python Flask application server:
-```powershell
 python app.py
 ```
-Output:
-```
-======================================================================
- BUENAVISTA COMMUNITY COLLEGE — GUIDANCE SYSTEM API SERVER
- REST API:   http://127.0.0.1:5000/api/v1
- Frontend:   http://127.0.0.1:5000/
- Database:   Supabase Remote (or SQLite Fallback)
-======================================================================
-```
 
-### D. Accessing the Application
-Once the server is running, navigate directly to **`http://127.0.0.1:5000`** in any web browser:
-- **Public Homepage:** `http://127.0.0.1:5000/` or `http://127.0.0.1:5000/index.html`
-- **Sign In Portal:** `http://127.0.0.1:5000/login.html`
-- **Student Registration:** `http://127.0.0.1:5000/signup.html`
-- **Student Portal:** `http://127.0.0.1:5000/student/dashboard.html`
-- **Counselor Portal:** `http://127.0.0.1:5000/counselor/dashboard.html`
-- **Admin Portal:** `http://127.0.0.1:5000/admin/dashboard.html`
+Then open **http://127.0.0.1:5000** in your browser.
 
+- Always open the site through the server address. Double-clicking an HTML file will not work.
+- **On a phone:** connect the phone to the same Wi-Fi, find this computer's IP address (`ipconfig` → IPv4 Address), and open `http://<that-IP>:5000`. If it doesn't load, allow Python through Windows Firewall.
+- Settings are optional. Copy `.env.example` to `.env` to change them (port, allowed email domain, sign-in lockout, Supabase).
 
----
-
-## 4. Supabase Database Configuration
-
-The application is built to connect directly to **Supabase** (Cloud PostgreSQL).
-
-### Setting Up Supabase:
-1. Log into your [Supabase Dashboard](https://supabase.com).
-2. Create a new project (e.g. `bcc-guidance-db`).
-3. In the left navigation, open the **SQL Editor**.
-4. Open [`supabase/schema.sql`](supabase/schema.sql) from this project, copy the entire content, paste it into the Supabase SQL Editor, and click **Run**.
-   - This creates all tables (`users`, `student_profiles`, `counselor_profiles`, `guidance_services`, `appointments`, `counseling_session_records`, `guidance_resources`, etc.), indexes, unique constraints, and Row Level Security policies.
-5. Next, open [`supabase/seed.sql`](supabase/seed.sql), paste it into the SQL Editor, and click **Run**.
-   - This seeds all default accounts, services, sample appointments, and guidance resources.
-6. Retrieve your API credentials from **Project Settings &rarr; API**:
-   - `Project URL` (e.g., `https://xyzproject.supabase.co`)
-   - `anon public key` or `service_role secret key`
-7. Edit the `.env` file in the project root:
-   ```env
-   SUPABASE_URL=https://your-project.supabase.co
-   SUPABASE_KEY=your-supabase-service-role-or-anon-key
-   ```
-8. Restart `python app.py`. The backend will log:
-   `[DB] Successfully connected to remote Supabase: https://your-project.supabase.co`
-
-> [!NOTE]
-> If `SUPABASE_URL` is empty, the application automatically runs on the integrated, zero-configuration local SQLite database (`database/bcc_guidance.db`) with identical schema and functionality!
-
----
-
-## 5. Demo Accounts & Credentials
-
-All demo accounts use the standard password: `password123`
-
-### 1. Student Accounts
-| Name | Institutional Email | Role | Program & Section |
-| :--- | :--- | :--- | :--- |
-| **Juan Dela Cruz** (Primary) | `juan.delacruz@buenavista.edu.ph` | Student | BSIT 3A |
-| **Angelica Ramos** | `angelica.ramos@buenavista.edu.ph` | Student | BSIT 2B |
-| **Mark Anthony Reyes** | `mark.reyes@buenavista.edu.ph` | Student | BSHM 1A |
-
-### 2. Guidance Counselor Accounts
-| Name | Institutional Email | Role | Specialization |
-| :--- | :--- | :--- | :--- |
-| **Dr. Maria Santos, RGC, PhD** | `msantos.guidance@buenavista.edu.ph` | Counselor | Personal & Mental Health |
-| **Prof. Robert Rivera, RGC, MAEd** | `rrivera.guidance@buenavista.edu.ph` | Counselor | Academic & Career Guidance |
-| **Ms. Elena Castillo, RPm, RGC** | `ecastillo.guidance@buenavista.edu.ph` | Counselor | Psychological Assessment |
-
-### 3. Administrator Account
-| Name | Institutional Email | Role | Office |
-| :--- | :--- | :--- | :--- |
-| **Director Lourdes Mendoza** | `admin.guidance@buenavista.edu.ph` | Administrator | Guidance & Student Services |
-
----
-
-## 6. Business Workflows Implemented
-
-### Workflow A: Appointment Booking & Concurrency Protection
-1. Student signs in and navigates to `student/book.html`.
-2. Student selects guidance service, counselor, date, and available time slot.
-3. Server validates availability in a transaction. If another student attempts to book the identical counselor slot concurrently, the system rejects it with HTTP `409 Conflict`.
-4. Upon successful booking, a unique reference code (`BCC-APT-YYYYMMDD-XXXX`) is issued and stored in the database.
-5. In-system notification is immediately generated for the assigned counselor.
-
-### Workflow B: Counselor Review & Decision
-1. Counselor logs into `counselor/appointments.html`.
-2. Counselor reviews appointment details (student name, urgency, modality, reason).
-3. Counselor can:
-   - **Approve**: Changes status to `Approved` and triggers student pass slip generation.
-   - **Reject**: Prompts for mandatory reason, marks as `Cancelled`, and notifies student.
-   - **View Pass Slip**: Displays printable/downloadable appointment pass with QR verification.
-
-### Workflow C: Clinical SOAP Case Notes (RA 9258 / RA 10173 Protected)
-1. Counselor conducts session and navigates to `counselor/notes.html`.
-2. Counselor clicks "+ New SOAP Note" to document:
-   - **S (Subjective)**: Student's expressed feelings and reported circumstances.
-   - **O (Objective)**: Clinical behavioral, emotional, and cognitive observations.
-   - **A (Assessment)**: Counselor's professional clinical appraisal.
-   - **P (Plan)**: Agreed intervention, homework, and follow-up timeline.
-3. Records are marked `Strictly Confidential` and stored in isolated tables accessible solely to authorized counselors.
-
-### Workflow D: Completed Session & Student Feedback
-1. Counselor marks appointment as `Completed`.
-2. In `student/appointments.html`, a **★ Feedback** button becomes available for the student.
-3. Student submits 1 to 5 star rating and confidential experience remarks.
-4. Duplicate submissions are strictly blocked by unique database constraint.
-
----
-
-## 7. Automated Testing Results
-
-The automated test suite (`tests/test_backend.py`) verifies all critical security and operational boundaries:
+### Running the tests
 
 ```powershell
-pytest tests/test_backend.py -v
+python -m pytest tests -q
 ```
 
-### Verified Test Cases:
-- `test_health_check` — **PASSED** (200 OK, health check response)
-- `test_student_login_valid` — **PASSED** (Valid student login, token issued)
-- `test_counselor_login_valid` — **PASSED** (Valid counselor login)
-- `test_admin_login_valid` — **PASSED** (Valid admin login)
-- `test_login_invalid_password` — **PASSED** (401 Unauthorized on bad credentials)
-- `test_student_registration` — **PASSED** (201 Created with student profile)
-- `test_guidance_services_catalog` — **PASSED** (Catalog retrieves 6 BCC services)
-- `test_appointment_booking_and_double_booking_prevention` — **PASSED** (Valid booking succeeds; duplicate concurrent booking returns 409 Conflict; status transitions Approved &rarr; Completed; feedback submission succeeds)
-- `test_confidential_clinical_soap_notes` — **PASSED** (Confidential note creation and counselor retrieval)
-- `test_guidance_resources_catalog` — **PASSED** (Retrieval of guidance guides)
-- `test_admin_users_and_audit_logs` — **PASSED** (User retrieval and audit logging)
+Each test uses its own temporary database, so running the tests never changes `database/bcc_guidance.db`.
 
-**Test Summary:** 11 passed in 6.75s (100% pass rate).
+---
+
+## 4. Supabase (optional)
+
+With no Supabase settings the app uses the local SQLite file. To use Supabase:
+
+1. Create a project, open the **SQL Editor**, run `supabase/schema.sql`, then `supabase/seed.sql`.
+2. In **Project Settings → API**, copy the Project URL and the **service_role** secret key.
+3. Put them in `.env`:
+   ```env
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_KEY=your-service-role-secret-key
+   ```
+4. Restart `python app.py`. It prints `[DB] Successfully connected to remote Supabase`.
+
+> **Important:** Row Level Security is on for every table with no public policies, so only the backend (using the service-role key) can read or write data. Keep the service-role key in `.env` only. Never put it in JavaScript.
+>
+> **If you set up Supabase with an older version** of this project, run `supabase/security_patch.sql` once. The old scripts created "Public Full Access" policies that let anyone with the public anon key read and change every table, including password hashes and SOAP notes.
+
+---
+
+## 5. Demo Accounts
+
+All seeded accounts use the password `password123`. Change these passwords (or remove the accounts) before real use.
+
+| Role | Email |
+| :--- | :--- |
+| Student | `juan.delacruz@buenavista.edu.ph`, `angelica.ramos@buenavista.edu.ph`, `mark.reyes@buenavista.edu.ph` |
+| Counselor | `msantos.guidance@buenavista.edu.ph`, `rrivera.guidance@buenavista.edu.ph`, `ecastillo.guidance@buenavista.edu.ph` |
+| Administrator | `admin.guidance@buenavista.edu.ph` |
+
+Students can register themselves with a `@buenavista.edu.ph` email (configurable with `ALLOWED_EMAIL_DOMAIN`). Counselor and admin accounts are created by an administrator.
+
+**Forgotten passwords:** for privacy, resets happen in person. An administrator opens **Users → Reset password**, gives the person a temporary password, and they change it from their account menu (**Change password**).
+
+---
+
+## 6. Rules the System Enforces
+
+**Security**
+- Every API route checks the session and role. Students only see their own data, counselors only their own appointments, notes and follow-ups, and admin routes require the admin role.
+- Sessions expire after 12 hours. Deactivated accounts are signed out on their next request.
+- After 5 wrong passwords for the same email, sign-in is blocked for 15 minutes. Error messages don't reveal whether an email is registered.
+- Passwords need at least 8 characters and are stored as bcrypt hashes. Password hashes are never sent to the browser.
+- All user-entered text is escaped before it is shown, so typed HTML can't run as code.
+
+**Booking** (limits are set in **Admin → Settings**)
+- Monday to Friday only, from the fixed list of 9 daily time slots.
+- At least *lead time* hours ahead (default 12) and at most *N* days ahead (default 14).
+- At most *N* upcoming appointments per student (default 2).
+- Respects each counselor's available weekdays and daily limit, and never double-books a slot (also enforced by a database index).
+
+**Appointment status**
+- Pending → Approved or Cancelled. Approved → Completed or Cancelled.
+- Students can cancel their own appointments up to the cancellation cut-off (default 4 hours before).
+- Counselors approve, reschedule, complete (on or after the appointment date) and cancel; a reason is required to reject or cancel.
+- Administrators can cancel any appointment with a reason.
+- Students can rate a session once, only after it is completed.
+- Every change is recorded in the status history and audit log, and the student or counselor is notified in the app.

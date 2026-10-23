@@ -35,10 +35,10 @@
       </div>
 
       <div class="sidebar-user">
-        <div class="sidebar-avatar admin">A</div>
+        <div class="sidebar-avatar admin"></div>
         <div class="sidebar-user-info">
-          <div class="sidebar-user-name">Guidance Admin</div>
-          <div class="sidebar-user-role">SYSTEM ADMINISTRATOR</div>
+          <div class="sidebar-user-name"></div>
+          <div class="sidebar-user-role"></div>
         </div>
       </div>
 
@@ -102,30 +102,25 @@
         </div>
 
         <div class="topbar-right">
-          <div class="topbar-search">
-            <span id="icon-search"></span>
-            <input type="text" placeholder="Search...">
-          </div>
 
           <div style="position: relative;">
             <button class="topbar-icon-btn" id="topbar-notif-btn" title="Notifications">
               <span id="icon-bell"></span>
-              <span class="notif-indicator"></span>
+              <span class="notif-indicator" style="display: none;"></span>
             </button>
             <div class="notif-dropdown" id="topbar-notif-popover">
               <div class="notif-head">
                 <span>Notifications</span>
-                <span class="badge badge-brand">New</span>
               </div>
               <div class="notif-list"></div>
             </div>
           </div>
 
           <div class="topbar-user">
-            <div class="topbar-avatar admin">A</div>
+            <div class="topbar-avatar admin"></div>
             <div class="topbar-user-info">
-              <div class="u-name">Guidance Admin</div>
-              <div class="u-role">ADMINISTRATOR</div>
+              <div class="u-name"></div>
+              <div class="u-role"></div>
             </div>
           </div>
         </div>
@@ -133,76 +128,34 @@
 
       <main class="page-content" id="main-content" role="main">
         <div class="page-container fade-in">
-          
           <div style="margin-bottom: 1.5rem;">
-            <h2 style="font-size: var(--text-2xl); font-weight: 800; color: var(--slate-900);">Campus Guidance Analytics</h2>
-            <p style="font-size: var(--text-sm); color: var(--slate-500); margin-top: 2px;">Comprehensive reporting on student service coverage and department performance.</p>
+            <h2 style="font-size: var(--text-2xl); font-weight: 800; color: var(--slate-900);">Campus Guidance Report</h2>
+            <p style="font-size: var(--text-sm); color: var(--slate-500); margin-top: 2px;">Live figures from every appointment and student rating in the system.</p>
           </div>
 
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-bottom: 1.5rem;">
-            <div class="card text-center">
-              <h4 style="font-size: 2.25rem; color: var(--bcc-brand); font-weight: 800;">1,248</h4>
-              <div class="text-xs text-muted" style="margin-top: 0.35rem; font-weight: 700;">Enrolled Students Covered</div>
-            </div>
-            <div class="card text-center">
-              <h4 style="font-size: 2.25rem; color: #3b82f6; font-weight: 800;">684</h4>
-              <div class="text-xs text-muted" style="margin-top: 0.35rem; font-weight: 700;">Total Consultations Processed</div>
-            </div>
-            <div class="card text-center">
-              <h4 style="font-size: 2.25rem; color: var(--bcc-primary); font-weight: 800;">96%</h4>
-              <div class="text-xs text-muted" style="margin-top: 0.35rem; font-weight: 700;">Student Satisfaction Index</div>
-            </div>
+          <div class="report-cards" id="rep-cards"></div>
+
+          <div class="card" style="margin-bottom: 1.5rem;">
+            <div class="card-header"><div class="card-title"><span id="icon-card-trend"></span> Appointments per month (last 6 months)</div></div>
+            <div id="rep-monthly"><p class="text-xs text-muted">Loading…</p></div>
           </div>
 
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">
-                <span id="icon-card-chart"></span> Consultations by Academic Department
-              </div>
-            </div>
-
+          <div class="card" style="margin-bottom: 1.5rem;">
+            <div class="card-header"><div class="card-title"><span id="icon-card-chart"></span> By degree program</div></div>
             <div class="table-wrap">
               <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Department / College</th>
-                    <th>Students Served</th>
-                    <th>Top Consultation Topic</th>
-                    <th>Completion Rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td class="font-bold">Information Technology (BSIT)</td>
-                    <td>240 students</td>
-                    <td>Career Planning & Capstone Stress</td>
-                    <td><span class="badge badge-confirmed">98%</span></td>
-                  </tr>
-                  <tr>
-                    <td class="font-bold">Hospitality Management (BSHM)</td>
-                    <td>180 students</td>
-                    <td>Industry Practicum & Adjustment</td>
-                    <td><span class="badge badge-confirmed">96%</span></td>
-                  </tr>
-                  <tr>
-                    <td class="font-bold">Criminal Justice (BSCRIM)</td>
-                    <td>165 students</td>
-                    <td>Academic & Physical Readiness</td>
-                    <td><span class="badge badge-confirmed">97%</span></td>
-                  </tr>
-                  <tr>
-                    <td class="font-bold">Tourism Management (BSTM)</td>
-                    <td>145 students</td>
-                    <td>Career Guidance & Development</td>
-                    <td><span class="badge badge-confirmed">95%</span></td>
-                  </tr>
-                  <tr>
-                    <td class="font-bold">Teacher Education (BSED / BEED)</td>
-                    <td>160 students</td>
-                    <td>Personal Development & Field Study</td>
-                    <td><span class="badge badge-confirmed">96%</span></td>
-                  </tr>
-                </tbody>
+                <thead><tr><th>Program</th><th>Students served</th><th>Most requested service</th><th>Completion rate</th></tr></thead>
+                <tbody id="rep-dept-tbody"><tr><td colspan="4" class="text-center text-muted" style="padding: 2rem;">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom: 1.5rem;">
+            <div class="card-header"><div class="card-title"><span id="icon-card-srv"></span> By guidance service</div></div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead><tr><th>Service</th><th>Completed</th><th>Completion rate</th><th>Average rating</th></tr></thead>
+                <tbody id="rep-service-tbody"><tr><td colspan="4" class="text-center text-muted" style="padding: 2rem;">Loading…</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -213,10 +166,11 @@
   </div>
 
   <script src="../js/icons.js"></script>
-  <script src="../js/data.js"></script>
+  <script src="../js/utils.js"></script>
   <script src="../js/storage.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/components/toast.js"></script>
+  <script src="../js/vendor/qrcode.min.js"></script>
   <script src="../js/components/modal.js"></script>
   <script src="../js/portal.js"></script>
   <script src="admin.js"></script>
@@ -237,9 +191,10 @@
       setIcon('nav-icon-log', 'shield');
       setIcon('icon-logout', 'logOut');
       setIcon('icon-menu', 'menu');
-      setIcon('icon-search', 'search');
       setIcon('icon-bell', 'bell');
       setIcon('icon-card-chart', 'barChart');
+      setIcon('icon-card-trend', 'calendar');
+      setIcon('icon-card-srv', 'book-open');
 
       AdminController.initReports();
     });

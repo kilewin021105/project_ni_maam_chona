@@ -5,171 +5,82 @@
 const CalendarComponent = {
   currentDate: new Date(),
 
-  render(containerId, appointments = [], onSelectAppointment = null) {
+  /**
+   * Renders a month grid with appointment pills.
+   * options.compact shows a dot count instead of names (for small widgets).
+   */
+  render(containerId, appointments = [], onSelectAppointment = null, options = {}) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
     const year = this.currentDate.getFullYear();
     const month = this.currentDate.getMonth();
-
-    const monthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-
+    const monthName = this.currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const firstDayIndex = new Date(year, month, 1).getDay();
-    const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+    const totalDays = new Date(year, month + 1, 0).getDate();
     const prevMonthDays = new Date(year, month, 0).getDate();
+    const todayStr = Utils.todayISO();
 
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    // Build Header
     let html = `
       <div class="calendar-widget">
         <div class="calendar-header">
           <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <h3 style="font-size: 1.1rem; color: var(--primary-900); font-weight: 700;">
-              ${monthNames[month]} ${year}
-            </h3>
-            <button class="btn btn-secondary btn-sm" id="cal-btn-today">Today</button>
+            <h3 style="font-size: 1.05rem; color: var(--slate-900); font-weight: 700;">${esc(monthName)}</h3>
+            <button type="button" class="btn btn-secondary btn-sm" data-cal="today">Today</button>
           </div>
           <div style="display: flex; align-items: center; gap: 0.35rem;">
-            <button class="icon-button" id="cal-btn-prev" aria-label="Previous Month">${Icons.get('chevronLeft')}</button>
-            <button class="icon-button" id="cal-btn-next" aria-label="Next Month">${Icons.get('chevronRight')}</button>
+            <button type="button" class="icon-button" data-cal="prev" aria-label="Previous month">${Icons.get('chevronLeft')}</button>
+            <button type="button" class="icon-button" data-cal="next" aria-label="Next month">${Icons.get('chevronRight')}</button>
           </div>
         </div>
-
-        <div class="calendar-month-grid">
-          <div class="calendar-weekday">Sun</div>
-          <div class="calendar-weekday">Mon</div>
-          <div class="calendar-weekday">Tue</div>
-          <div class="calendar-weekday">Wed</div>
-          <div class="calendar-weekday">Thu</div>
-          <div class="calendar-weekday">Fri</div>
-          <div class="calendar-weekday">Sat</div>
+        <div class="calendar-month-grid ${options.compact ? 'compact' : ''}">
+          ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => `<div class="calendar-weekday">${d}</div>`).join('')}
     `;
 
-    // Previous month empty/padded days
     for (let i = firstDayIndex - 1; i >= 0; i--) {
-      const d = prevMonthDays - i;
-      html += `
-        <div class="calendar-day-cell other-month">
-          <div class="day-number">${d}</div>
-        </div>
-      `;
+      html += `<div class="calendar-day-cell other-month"><div class="day-number">${prevMonthDays - i}</div></div>`;
     }
 
-    // Days of current month
-    for (let day = 1; day <= totalDaysInMonth; day++) {
-      const monthStr = String(month + 1).padStart(2, '0');
-      const dayStr = String(day).padStart(2, '0');
-      const cellDateStr = `${year}-${monthStr}-${dayStr}`;
-
-      const isToday = cellDateStr === todayStr;
-      const dayAppointments = appointments.filter(a => a.date === cellDateStr && a.status !== 'Cancelled');
-
-      let pillsHtml = '';
-      dayAppointments.forEach(apt => {
-        const statusClass = apt.status.toLowerCase();
-        pillsHtml += `
-          <div class="calendar-event-pill ${statusClass}" data-apt-id="${apt.id}" title="${apt.timeSlot} - ${apt.studentName} (${apt.serviceTitle})">
-            ${apt.timeSlot} ${apt.studentName.split(' ')[0]}
-          </div>
-        `;
-      });
-
+    for (let day = 1; day <= totalDays; day++) {
+      const cellDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const dayApts = appointments.filter(a => a.date === cellDate && a.status !== 'Cancelled');
+      const pills = options.compact
+        ? (dayApts.length ? `<div class="calendar-event-pill approved" title="${dayApts.length} appointment(s)">${dayApts.length}</div>` : '')
+        : dayApts.map(apt => `
+            <div class="calendar-event-pill ${esc(apt.status.toLowerCase())}" data-apt-id="${esc(apt.id)}" role="button" tabindex="0"
+                 title="${esc(`${apt.timeSlot} – ${apt.studentName} (${apt.serviceTitle})`)}">
+              ${esc(apt.timeSlot)} ${esc(Utils.firstName(apt.studentName))}
+            </div>`).join('');
       html += `
-        <div class="calendar-day-cell ${isToday ? 'today' : ''}" data-date="${cellDateStr}">
+        <div class="calendar-day-cell ${cellDate === todayStr ? 'today' : ''}" data-date="${cellDate}">
           <div class="day-number">${day}</div>
-          <div class="calendar-events-wrap">${pillsHtml}</div>
-        </div>
-      `;
+          <div class="calendar-events-wrap">${pills}</div>
+        </div>`;
     }
 
-    // Remaining cells to fill grid row
-    const totalRendered = firstDayIndex + totalDaysInMonth;
-    const nextDaysCount = (7 - (totalRendered % 7)) % 7;
-    for (let nextDay = 1; nextDay <= nextDaysCount; nextDay++) {
-      html += `
-        <div class="calendar-day-cell other-month">
-          <div class="day-number">${nextDay}</div>
-        </div>
-      `;
+    const trailing = (7 - ((firstDayIndex + totalDays) % 7)) % 7;
+    for (let d = 1; d <= trailing; d++) {
+      html += `<div class="calendar-day-cell other-month"><div class="day-number">${d}</div></div>`;
     }
+    container.innerHTML = html + '</div></div>';
 
-    html += `
-        </div>
-      </div>
-    `;
+    const rerender = () => this.render(containerId, appointments, onSelectAppointment, options);
+    container.querySelector('[data-cal="prev"]').addEventListener('click', () => { this.currentDate.setMonth(this.currentDate.getMonth() - 1, 1); rerender(); });
+    container.querySelector('[data-cal="next"]').addEventListener('click', () => { this.currentDate.setMonth(this.currentDate.getMonth() + 1, 1); rerender(); });
+    container.querySelector('[data-cal="today"]').addEventListener('click', () => { this.currentDate = new Date(); rerender(); });
 
-    container.innerHTML = html;
-
-    // Attach calendar navigation events
-    container.querySelector('#cal-btn-prev').addEventListener('click', () => {
-      this.currentDate.setMonth(this.currentDate.getMonth() - 1);
-      this.render(containerId, appointments, onSelectAppointment);
-    });
-
-    container.querySelector('#cal-btn-next').addEventListener('click', () => {
-      this.currentDate.setMonth(this.currentDate.getMonth() + 1);
-      this.render(containerId, appointments, onSelectAppointment);
-    });
-
-    container.querySelector('#cal-btn-today').addEventListener('click', () => {
-      this.currentDate = new Date();
-      this.render(containerId, appointments, onSelectAppointment);
-    });
-
-    // Event Pill clicks
     if (typeof onSelectAppointment === 'function') {
-      container.querySelectorAll('.calendar-event-pill').forEach(pill => {
-        pill.addEventListener('click', (e) => {
+      container.querySelectorAll('.calendar-event-pill[data-apt-id]').forEach(pill => {
+        const open = (e) => {
           e.stopPropagation();
-          const aptId = pill.getAttribute('data-apt-id');
-          const apt = appointments.find(a => a.id === aptId);
+          const apt = appointments.find(a => a.id === pill.dataset.aptId);
           if (apt) onSelectAppointment(apt);
-        });
+        };
+        pill.addEventListener('click', open);
+        pill.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(e); });
       });
     }
-  },
-
-  async renderFull(containerId) {
-    let appointments = [];
-    try {
-      if (typeof ApiClient !== 'undefined') {
-        appointments = await ApiClient.getAppointments();
-      } else if (typeof StorageService !== 'undefined') {
-        appointments = StorageService.getAppointments();
-      }
-    } catch (e) {
-      console.warn('Calendar loading appointments error:', e);
-    }
-    this.render(containerId, appointments, (apt) => {
-      if (typeof Modal !== 'undefined' && Modal.showAppointmentDetails) {
-        Modal.showAppointmentDetails(apt);
-      }
-    });
-  },
-
-  async renderMini(containerId) {
-    let appointments = [];
-    try {
-      if (typeof ApiClient !== 'undefined') {
-        appointments = await ApiClient.getAppointments();
-      } else if (typeof StorageService !== 'undefined') {
-        appointments = StorageService.getAppointments();
-      }
-    } catch (e) {
-      console.warn('Mini calendar error:', e);
-    }
-    this.render(containerId, appointments, (apt) => {
-      if (typeof Modal !== 'undefined' && Modal.showAppointmentDetails) {
-        Modal.showAppointmentDetails(apt);
-      }
-    });
   }
 };
 
 const Calendar = CalendarComponent;
-window.Calendar = CalendarComponent;
-window.CalendarComponent = CalendarComponent;

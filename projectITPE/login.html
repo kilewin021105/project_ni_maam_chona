@@ -94,7 +94,8 @@
       <div class="auth-body">
 
         <!-- Credentials Sign In Form -->
-        <form id="login-form">
+        <div class="alert alert-warning" id="login-notice" hidden style="margin-bottom: 1rem;"></div>
+        <form id="login-form" novalidate>
           <div class="form-group">
             <label class="form-label required" for="login-email">BCC Institutional Email</label>
             <input type="email" id="login-email" class="form-input" placeholder="e.g. yourname@buenavista.edu.ph" required autocomplete="username">
@@ -103,11 +104,11 @@
           <div class="form-group">
             <div class="flex justify-between items-center" style="margin-bottom: 0.35rem;">
               <label class="form-label required" for="login-password" style="margin-bottom: 0;">Password</label>
-              <a href="#" id="link-forgot-password" style="font-size: 11px; font-weight: 700; color: var(--bcc-brand);">Forgot Password?</a>
+              <button type="button" id="link-forgot-password" class="link-button" style="font-size: 11px; font-weight: 700; color: var(--bcc-brand);">Forgot password?</button>
             </div>
             <div class="input-with-action">
               <input type="password" id="login-password" class="form-input" placeholder="Enter your password" required autocomplete="current-password">
-              <button type="button" id="btn-toggle-pwd" class="btn-input-toggle">
+              <button type="button" id="btn-toggle-pwd" class="btn-input-toggle" aria-label="Show password">
                 Show
               </button>
             </div>
@@ -118,7 +119,6 @@
               <input type="checkbox" id="remember-me" checked style="accent-color: var(--bcc-brand); width: 15px; height: 15px;">
               <span class="text-muted" style="font-weight: 500;">Keep me signed in</span>
             </label>
-            <span style="color: var(--slate-400); font-weight: 600;">🔒 SSL Encrypted</span>
           </div>
 
           <button type="submit" class="btn btn-primary btn-lg w-full" id="btn-submit-login">
@@ -146,86 +146,78 @@
 
   <!-- Scripts in Proper Dependency Order -->
   <script src="js/icons.js"></script>
-  <script src="js/data.js"></script>
+  <script src="js/utils.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/api.js"></script>
   <script src="js/components/toast.js"></script>
   <script src="js/components/modal.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      StorageService.init();
+      // Already signed in? Go straight to the right portal (the portal re-checks the session with the server)
+      const existing = Session.getUser();
+      if (existing && Session.getToken()) {
+        window.location.replace(Session.dashboardFor(existing.role));
+        return;
+      }
+
+      const notice = sessionStorage.getItem('bcc_login_notice');
+      if (notice) {
+        const box = document.getElementById('login-notice');
+        box.textContent = notice;
+        box.hidden = false;
+        sessionStorage.removeItem('bcc_login_notice');
+      }
 
       const form = document.getElementById('login-form');
       const emailInput = document.getElementById('login-email');
       const pwdInput = document.getElementById('login-password');
-      const togglePwdBtn = document.getElementById('btn-toggle-pwd');
+      const toggle = document.getElementById('btn-toggle-pwd');
       const submitBtn = document.getElementById('btn-submit-login');
 
-      // Password visibility toggle
-      if (togglePwdBtn && pwdInput) {
-        togglePwdBtn.addEventListener('click', () => {
-          if (pwdInput.type === 'password') {
-            pwdInput.type = 'text';
-            togglePwdBtn.textContent = 'Hide';
-          } else {
-            pwdInput.type = 'password';
-            togglePwdBtn.textContent = 'Show';
-          }
-        });
-      }
+      toggle.addEventListener('click', () => {
+        const show = pwdInput.type === 'password';
+        pwdInput.type = show ? 'text' : 'password';
+        toggle.textContent = show ? 'Hide' : 'Show';
+        toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      });
 
-      // Submit Form
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const email = emailInput.value.trim();
         const password = pwdInput.value;
-        await performLogin(email, password);
-      });
-
-      async function performLogin(email, password) {
+        if (!email || !password) {
+          Toast.warning('Missing information', 'Enter your email and password.');
+          return;
+        }
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Authenticating...';
-
+        submitBtn.textContent = 'Signing in…';
         try {
-          const res = await ApiClient.login(email, password);
-          Toast.success('Login Successful', `Welcome back, ${res.user.name}!`);
-
-          setTimeout(() => {
-            if (res.user.role === 'student') {
-              window.location.href = 'student/dashboard.html';
-            } else if (res.user.role === 'counselor') {
-              window.location.href = 'counselor/dashboard.html';
-            } else if (res.user.role === 'admin') {
-              window.location.href = 'admin/dashboard.html';
-            } else {
-              window.location.href = 'student/dashboard.html';
-            }
-          }, 400);
+          const res = await ApiClient.login(email, password, document.getElementById('remember-me').checked);
+          window.location.href = Session.dashboardFor(res.user.role);
         } catch (err) {
-          Toast.error('Authentication Error', err.message || 'Invalid email or password.');
+          Toast.error('Sign-in failed', err.message);
           submitBtn.disabled = false;
           submitBtn.textContent = 'Sign In to Portal →';
+          pwdInput.select();
         }
-      }
+      });
 
-      // Forgot Password Modal
-      const forgotLink = document.getElementById('link-forgot-password');
-      if (forgotLink) {
-        forgotLink.addEventListener('click', (e) => {
-          e.preventDefault();
-          Modal.confirm({
-            title: 'Password Recovery Assistance',
-            message: 'For security and confidentiality (RA 10173), student and staff account password resets must be verified through the BCC Guidance Office or Campus MIS. Would you like to use the demo default password (password123)?',
-            confirmText: 'Use Default (password123)',
-            cancelText: 'Cancel',
-            confirmType: 'btn-primary',
-            onConfirm: () => {
-              pwdInput.value = 'password123';
-              Toast.info('Password Filled', 'Default demo password filled.');
-            }
-          });
+      document.getElementById('link-forgot-password').addEventListener('click', () => {
+        Modal.open({
+          title: 'Forgot your password?',
+          size: 'modal-md',
+          content: `
+            <div style="line-height: 1.6; color: var(--slate-700); font-size: var(--text-sm);">
+              <p style="margin-bottom: 0.75rem;">For your privacy (RA 10173), passwords are reset in person.</p>
+              <ol style="padding-left: 1.2rem; margin: 0; display: flex; flex-direction: column; gap: 0.35rem;">
+                <li>Visit the BCC Guidance Office (Room 204), Monday to Friday, 8:00 AM – 5:00 PM.</li>
+                <li>Bring your school ID so the staff can confirm who you are.</li>
+                <li>The office will give you a temporary password. Sign in with it, then choose a new one from your account menu.</li>
+              </ol>
+            </div>`,
+          footer: '<button type="button" class="btn btn-primary" data-modal-close>Got it</button>'
         });
-      }
+      });
     });
   </script>
 </body>

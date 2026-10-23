@@ -288,51 +288,30 @@ ON CONFLICT (setting_key) DO UPDATE SET
     setting_value = EXCLUDED.setting_value,
     description = EXCLUDED.description;
 
--- 7. CONFIGURE ROW LEVEL SECURITY (RLS) POLICIES
--- Enables Row Level Security and creates full-access policies for anon/authenticated roles
--- so web users and the Python API server can read and write without 42501 permission errors.
-
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE student_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE counselor_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE guidance_services ENABLE ROW LEVEL SECURITY;
-ALTER TABLE counselor_availability ENABLE ROW LEVEL SECURITY;
-ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE appointment_status_history ENABLE ROW LEVEL SECURITY;
-ALTER TABLE counseling_session_records ENABLE ROW LEVEL SECURITY;
-ALTER TABLE follow_up_tasks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
-ALTER TABLE guidance_resources ENABLE ROW LEVEL SECURITY;
-ALTER TABLE appointment_feedback ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
-
+-- 7. ROW LEVEL SECURITY
+-- RLS is enabled with NO public policies: only the backend (service-role key) can read or write.
+-- The previous version created "Public Full Access" policies here, which exposed every table to
+-- anyone with the anon key. If you ran that version, also run security_patch.sql.
 DO $$
 DECLARE
     tbl text;
+    pol record;
     tables text[] := ARRAY[
-        'users',
-        'student_profiles',
-        'counselor_profiles',
-        'guidance_services',
-        'counselor_availability',
-        'appointments',
-        'appointment_status_history',
-        'counseling_session_records',
-        'follow_up_tasks',
-        'notifications',
-        'announcements',
-        'guidance_resources',
-        'appointment_feedback',
-        'audit_logs',
-        'system_settings'
+        'users', 'student_profiles', 'counselor_profiles', 'guidance_services', 'counselor_availability',
+        'appointments', 'appointment_status_history', 'counseling_session_records', 'follow_up_tasks',
+        'notifications', 'announcements', 'guidance_resources', 'appointment_feedback', 'audit_logs', 'system_settings'
     ];
 BEGIN
     FOREACH tbl IN ARRAY tables LOOP
-        -- Drop any old conflicting policy with this name
-        EXECUTE format('DROP POLICY IF EXISTS "Public Full Access" ON %I;', tbl);
-        -- Create permissive policy allowing SELECT, INSERT, UPDATE, DELETE for all roles
-        EXECUTE format('CREATE POLICY "Public Full Access" ON %I FOR ALL USING (true) WITH CHECK (true);', tbl);
+        IF to_regclass('public.' || tbl) IS NULL THEN
+            CONTINUE;
+        END IF;
+        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', tbl);
+        -- Remove every existing policy on the table (the old ones all used USING (true))
+        FOR pol IN SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = tbl LOOP
+            EXECUTE format('DROP POLICY IF EXISTS %I ON %I;', pol.policyname, tbl);
+        END LOOP;
+        -- Belt and braces: the browser-facing roles get no table privileges at all
+        EXECUTE format('REVOKE ALL ON TABLE %I FROM anon, authenticated;', tbl);
     END LOOP;
 END $$;

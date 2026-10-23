@@ -1,8 +1,8 @@
+import re
 import sqlite3
-import json
 import uuid
 import datetime
-from pathlib import Path
+from contextlib import contextmanager
 from .config import Config
 
 class DBService:
@@ -39,7 +39,7 @@ class DBService:
     def get_connection(cls):
         """Returns SQLite connection with row factory enabled."""
         Config.LOCAL_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(Config.LOCAL_DB_PATH))
+        conn = sqlite3.connect(str(Config.LOCAL_DB_PATH), timeout=10)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -47,6 +47,13 @@ class DBService:
     def _init_sqlite(cls):
         """Initializes SQLite tables and seeds initial data if database is new."""
         conn = cls.get_connection()
+        try:
+            cls._create_and_seed(conn)
+        finally:
+            conn.close()
+
+    @classmethod
+    def _create_and_seed(cls, conn):
         cursor = conn.cursor()
 
         cursor.executescript("""
@@ -250,11 +257,10 @@ class DBService:
         cur.execute("SELECT COUNT(*) FROM users")
         if cur.fetchone()[0] == 0:
             cls._seed_sqlite(conn)
-        conn.close()
 
     @classmethod
     def _seed_sqlite(cls, conn):
-        """Seeds initial demo data from account.text into SQLite."""
+        """Seeds the demo accounts (password: password123) and sample data into a new SQLite database."""
         # bcrypt hash for password123
         pwd_hash = "$2b$12$4McCr50z0YtmHGL34kwdu.CNaaKCRqA9.Xn.FE/KmKVTT3hay0Xjm"
 
@@ -343,477 +349,465 @@ class DBService:
 
         conn.commit()
 
-    # ── CRUD Operations Abstraction Layer ──
+    # ══════════════════════════════════════════════════════════════════
+    # Helpers
+    # ══════════════════════════════════════════════════════════════════
+
+    USER_COLUMNS = 'id, email, name, role, avatar_initial, status, phone, created_at, updated_at'
+    STUDENT_PROFILE_FIELDS = ('student_id_number', 'course', 'year_section', 'emergency_contact')
+    COUNSELOR_PROFILE_FIELDS = ('title', 'room', 'specialization', 'max_daily_appointments', 'bio')
+    ID_PATTERN = re.compile(r'^[A-Za-z0-9_\-]{1,80}$')
 
     @classmethod
-    def get_user_by_email(cls, email: str) -> dict:
-        if cls._use_supabase:
-            res = cls._supabase_client.table('users').select('*').eq('email', email.lower()).execute()
-            if res.data:
-                u = res.data[0]
-                uid = u['id']
-                if u['role'] == 'student':
-                    p = cls._supabase_client.table('student_profiles').select('*').eq('user_id', uid).execute()
-                    if p.data:
-                        prof_data = {k: v for k, v in p.data[0].items() if k != 'id'}
-                        u.update(prof_data)
-                        u['profile_id'] = p.data[0].get('id')
-                elif u['role'] == 'counselor':
-                    p = cls._supabase_client.table('counselor_profiles').select('*').eq('user_id', uid).execute()
-                    if p.data:
-                        prof_data = {k: v for k, v in p.data[0].items() if k != 'id'}
-                        u.update(prof_data)
-                        u['profile_id'] = p.data[0].get('id')
-                u['id'] = uid
-                return u
-            return None
-
+    @contextmanager
+    def _tx(cls):
+        """SQLite transaction: commits on success, rolls back on any error, always closes.
+        This is what keeps one failed request from leaving the database locked."""
         conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE LOWER(email) = ?", (email.lower(),))
-        row = cur.fetchone()
-        if not row:
+        try:
+            yield conn.cursor()
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
             conn.close()
-            return None
-        user = dict(row)
-        uid = user['id']
-        if user['role'] == 'student':
-            cur.execute("SELECT * FROM student_profiles WHERE user_id = ?", (uid,))
-            p = cur.fetchone()
-            if p:
-                prof_data = {k: v for k, v in dict(p).items() if k != 'id'}
-                user.update(prof_data)
-                user['profile_id'] = dict(p).get('id')
-        elif user['role'] == 'counselor':
-            cur.execute("SELECT * FROM counselor_profiles WHERE user_id = ?", (uid,))
-            p = cur.fetchone()
-            if p:
-                prof_data = {k: v for k, v in dict(p).items() if k != 'id'}
-                user.update(prof_data)
-                user['profile_id'] = dict(p).get('id')
-        user['id'] = uid
-        conn.close()
+
+    @classmethod
+    def _query(cls, sql, params=()) -> list:
+        conn = cls.get_connection()
+        try:
+            return [dict(r) for r in conn.execute(sql, params).fetchall()]
+        finally:
+            conn.close()
+
+    @classmethod
+    def _query_one(cls, sql, params=()):
+        rows = cls._query(sql, params)
+        return rows[0] if rows else None
+
+    @classmethod
+    def _sb(cls):
+        return cls._supabase_client
+
+    @staticmethod
+    def new_id(prefix: str) -> str:
+        return f"{prefix}-{uuid.uuid4().hex[:12]}"
+
+    @staticmethod
+    def _now() -> str:
+        return datetime.datetime.now().isoformat(timespec='seconds')
+
+    @classmethod
+    def valid_id(cls, value) -> bool:
+        return bool(value) and bool(cls.ID_PATTERN.match(str(value)))
+
+    @staticmethod
+    def _first(value):
+        """Supabase embeds come back as a list or a dict depending on the relationship."""
+        if isinstance(value, list):
+            return value[0] if value else {}
+        return value if isinstance(value, dict) else {}
+
+    # ══════════════════════════════════════════════════════════════════
+    # Users
+    # ══════════════════════════════════════════════════════════════════
+
+    @classmethod
+    def _profile_table(cls, role):
+        return {'student': 'student_profiles', 'counselor': 'counselor_profiles'}.get(role)
+
+    @classmethod
+    def _attach_profile(cls, user: dict) -> dict:
+        table = cls._profile_table(user.get('role'))
+        if not table:
+            return user
+        if cls._use_supabase:
+            res = cls._sb().table(table).select('*').eq('user_id', user['id']).execute()
+            prof = dict(res.data[0]) if res.data else None
+        else:
+            prof = cls._query_one(f"SELECT * FROM {table} WHERE user_id = ?", (user['id'],))
+        if prof:
+            user['profile_id'] = prof.pop('id', None)
+            for k in ('user_id', 'created_at', 'updated_at'):
+                prof.pop(k, None)
+            user.update(prof)
         return user
 
     @classmethod
-    def get_user_by_id(cls, user_id: str) -> dict:
-        if cls._use_supabase:
-            res = cls._supabase_client.table('users').select('*').eq('id', user_id).execute()
-            if not res.data:
-                # Check if user_id passed was actually a profile ID
-                sp_lookup = cls._supabase_client.table('student_profiles').select('user_id').eq('id', user_id).execute()
-                if sp_lookup.data:
-                    return cls.get_user_by_id(sp_lookup.data[0]['user_id'])
-                cp_lookup = cls._supabase_client.table('counselor_profiles').select('user_id').eq('id', user_id).execute()
-                if cp_lookup.data:
-                    return cls.get_user_by_id(cp_lookup.data[0]['user_id'])
-                return None
-            u = res.data[0]
-            uid = u['id']
-            if u.get('role') == 'student':
-                sp = cls._supabase_client.table('student_profiles').select('*').eq('user_id', uid).execute()
-                if sp.data:
-                    prof_data = {k: v for k, v in sp.data[0].items() if k != 'id'}
-                    u.update(prof_data)
-                    u['profile_id'] = sp.data[0].get('id')
-            elif u.get('role') == 'counselor':
-                cp = cls._supabase_client.table('counselor_profiles').select('*').eq('user_id', uid).execute()
-                if cp.data:
-                    prof_data = {k: v for k, v in cp.data[0].items() if k != 'id'}
-                    u.update(prof_data)
-                    u['profile_id'] = cp.data[0].get('id')
-            u['id'] = uid
-            return u
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-        row = cur.fetchone()
-        if not row:
-            # Check profile id fallback in SQLite
-            cur.execute("SELECT user_id FROM student_profiles WHERE id = ?", (user_id,))
-            sp_r = cur.fetchone()
-            if sp_r:
-                conn.close()
-                return cls.get_user_by_id(sp_r[0])
-            cur.execute("SELECT user_id FROM counselor_profiles WHERE id = ?", (user_id,))
-            cp_r = cur.fetchone()
-            if cp_r:
-                conn.close()
-                return cls.get_user_by_id(cp_r[0])
-            conn.close()
+    def _get_user(cls, column: str, value, include_password: bool) -> dict:
+        if value is None:
             return None
-        user = dict(row)
-        uid = user['id']
-        if user.get('role') == 'student':
-            cur.execute("SELECT * FROM student_profiles WHERE user_id = ?", (uid,))
-            p = cur.fetchone()
-            if p:
-                prof_data = {k: v for k, v in dict(p).items() if k != 'id'}
-                user.update(prof_data)
-                user['profile_id'] = dict(p).get('id')
-        elif user.get('role') == 'counselor':
-            cur.execute("SELECT * FROM counselor_profiles WHERE user_id = ?", (uid,))
-            p = cur.fetchone()
-            if p:
-                prof_data = {k: v for k, v in dict(p).items() if k != 'id'}
-                user.update(prof_data)
-                user['profile_id'] = dict(p).get('id')
-        user['id'] = uid
-        conn.close()
-        return user
+        cols = cls.USER_COLUMNS + (', password_hash' if include_password else '')
+        if cls._use_supabase:
+            q = cls._sb().table('users').select(cols)
+            q = q.eq(column, value.lower() if column == 'email' else value)
+            res = q.execute()
+            user = dict(res.data[0]) if res.data else None
+        else:
+            where = 'LOWER(email) = ?' if column == 'email' else f'{column} = ?'
+            user = cls._query_one(f"SELECT {cols} FROM users WHERE {where}",
+                                  (value.lower() if column == 'email' else value,))
+        return cls._attach_profile(user) if user else None
+
+    @classmethod
+    def get_user_by_email(cls, email: str, include_password: bool = False) -> dict:
+        return cls._get_user('email', (email or '').strip(), include_password)
+
+    @classmethod
+    def get_user_by_id(cls, user_id: str, include_password: bool = False) -> dict:
+        return cls._get_user('id', user_id, include_password)
+
+    @classmethod
+    def get_user_by_student_number(cls, student_number: str) -> dict:
+        if not student_number:
+            return None
+        if cls._use_supabase:
+            res = cls._sb().table('student_profiles').select('user_id').eq('student_id_number', student_number).execute()
+            return {'id': res.data[0]['user_id']} if res.data else None
+        row = cls._query_one("SELECT user_id FROM student_profiles WHERE student_id_number = ?", (student_number,))
+        return {'id': row['user_id']} if row else None
 
     @classmethod
     def get_all_users(cls, role: str = None) -> list:
         if cls._use_supabase:
-            users_list = []
-            try:
-                q = cls._supabase_client.table('users').select("""
-                    *,
-                    student_profiles(course, year_section, student_id_number, emergency_contact),
-                    counselor_profiles(specialization, room, title)
-                """)
-                if role:
-                    q = q.eq('role', role)
-                res = q.order('created_at', desc=True).execute()
-                users_list = res.data or []
-            except Exception as e:
-                print(f"[Supabase] get_all_users join fallback: {e}")
-                q = cls._supabase_client.table('users').select('*')
-                if role:
-                    q = q.eq('role', role)
-                res = q.order('created_at', desc=True).execute()
-                users_list = res.data or []
+            select = (cls.USER_COLUMNS +
+                      ', student_profiles(student_id_number, course, year_section, emergency_contact)'
+                      ', counselor_profiles(title, room, specialization, max_daily_appointments, bio)')
+            q = cls._sb().table('users').select(select)
+            if role:
+                q = q.eq('role', role)
+            out = []
+            for u in (q.order('created_at', desc=True).execute().data or []):
+                sp = cls._first(u.pop('student_profiles', None))
+                cp = cls._first(u.pop('counselor_profiles', None))
+                out.append({**u, **sp, **cp})
+            return out
 
-            users = []
-            for u in users_list:
-                sp_raw = u.get('student_profiles')
-                sp = sp_raw[0] if isinstance(sp_raw, list) and len(sp_raw) > 0 else (sp_raw if isinstance(sp_raw, dict) else {})
-                cp_raw = u.get('counselor_profiles')
-                cp = cp_raw[0] if isinstance(cp_raw, list) and len(cp_raw) > 0 else (cp_raw if isinstance(cp_raw, dict) else {})
-                users.append({
-                    **u,
-                    'course': sp.get('course', ''),
-                    'year_section': sp.get('year_section', ''),
-                    'student_id_number': sp.get('student_id_number', ''),
-                    'emergency_contact': sp.get('emergency_contact', ''),
-                    'specialization': cp.get('specialization', ''),
-                    'room': cp.get('room', ''),
-                    'title': cp.get('title', '')
-                })
-            return users
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        if role:
-            cur.execute("""
-                SELECT u.id, u.email, u.name, u.role, u.avatar_initial, u.status, u.phone, u.created_at,
-                       sp.course, sp.year_section, cp.specialization
-                FROM users u
-                LEFT JOIN student_profiles sp ON u.id = sp.user_id
-                LEFT JOIN counselor_profiles cp ON u.id = cp.user_id
-                WHERE u.role = ? ORDER BY u.created_at DESC
-            """, (role,))
-        else:
-            cur.execute("""
-                SELECT u.id, u.email, u.name, u.role, u.avatar_initial, u.status, u.phone, u.created_at,
-                       sp.course, sp.year_section, cp.specialization
-                FROM users u
-                LEFT JOIN student_profiles sp ON u.id = sp.user_id
-                LEFT JOIN counselor_profiles cp ON u.id = cp.user_id
-                ORDER BY u.created_at DESC
-            """)
-        rows = [dict(r) for r in cur.fetchall()]
-        conn.close()
-        return rows
+        query = f"""
+            SELECT u.id, u.email, u.name, u.role, u.avatar_initial, u.status, u.phone, u.created_at,
+                   sp.student_id_number, sp.course, sp.year_section, sp.emergency_contact,
+                   cp.title, cp.room, cp.specialization, cp.max_daily_appointments, cp.bio
+            FROM users u
+            LEFT JOIN student_profiles sp ON u.id = sp.user_id
+            LEFT JOIN counselor_profiles cp ON u.id = cp.user_id
+            {'WHERE u.role = ?' if role else ''}
+            ORDER BY u.created_at DESC
+        """
+        return cls._query(query, (role,) if role else ())
 
     @classmethod
     def create_user(cls, user_data: dict) -> dict:
-        uid = user_data.get('id') or f"usr-{uuid.uuid4().hex[:8]}"
-        user_data['id'] = uid
+        uid = cls.new_id('usr')
+        role = user_data['role']
+        user_row = {
+            'id': uid,
+            'email': user_data['email'].strip().lower(),
+            'password_hash': user_data['password_hash'],
+            'name': user_data['name'].strip(),
+            'role': role,
+            'avatar_initial': user_data.get('avatar_initial') or user_data['name'][:2].upper(),
+            'status': user_data.get('status', 'active'),
+            'phone': user_data.get('phone', '')
+        }
+        profile_row = None
+        if role == 'student':
+            profile_row = {
+                'id': cls.new_id('prof'),
+                'user_id': uid,
+                'student_id_number': user_data.get('student_id_number') or f"BCC-{datetime.date.today().year}-{uuid.uuid4().hex[:5].upper()}",
+                'course': user_data.get('course') or 'BSIT',
+                'year_section': user_data.get('year_section') or '1A',
+                'emergency_contact': user_data.get('emergency_contact', '')
+            }
+        elif role == 'counselor':
+            profile_row = {
+                'id': cls.new_id('cprof'),
+                'user_id': uid,
+                'title': user_data.get('title') or 'Registered Guidance Counselor',
+                'room': user_data.get('room') or 'Guidance Office Rm 204',
+                'specialization': user_data.get('specialization') or 'General Guidance',
+                'max_daily_appointments': int(user_data.get('max_daily_appointments') or 5),
+                'bio': user_data.get('bio', '')
+            }
 
         if cls._use_supabase:
-            cls._supabase_client.table('users').insert({
-                'id': uid,
-                'email': user_data['email'].lower(),
-                'password_hash': user_data['password_hash'],
-                'name': user_data['name'],
-                'role': user_data['role'],
-                'avatar_initial': user_data.get('avatar_initial') or user_data['name'][:2].upper(),
-                'status': user_data.get('status', 'active'),
-                'phone': user_data.get('phone', '')
-            }).execute()
+            cls._sb().table('users').insert(user_row).execute()
+            if profile_row:
+                try:
+                    cls._sb().table(cls._profile_table(role)).insert(profile_row).execute()
+                except Exception:
+                    # No cross-table transaction over REST: undo the user row so no half-account is left behind
+                    cls._sb().table('users').delete().eq('id', uid).execute()
+                    raise
+            return cls.get_user_by_id(uid)
 
-            if user_data['role'] == 'student':
-                student_id = user_data.get('student_id_number') or user_data.get('studentId') or user_data.get('student_id') or f"BCC-2026-{uuid.uuid4().hex[:5].upper()}"
-                year_sec = user_data.get('year_section') or user_data.get('yearSection') or '1A'
-                em_contact = user_data.get('emergency_contact') or user_data.get('emergencyContact') or ''
-                course = user_data.get('course') or 'BSIT'
+        with cls._tx() as cur:
+            cols = ', '.join(user_row)
+            cur.execute(f"INSERT INTO users ({cols}) VALUES ({', '.join('?' * len(user_row))})", tuple(user_row.values()))
+            if profile_row:
+                pcols = ', '.join(profile_row)
+                cur.execute(f"INSERT INTO {cls._profile_table(role)} ({pcols}) VALUES ({', '.join('?' * len(profile_row))})",
+                            tuple(profile_row.values()))
+        return cls.get_user_by_id(uid)
 
-                cls._supabase_client.table('student_profiles').insert({
-                    'id': f"prof-{uuid.uuid4().hex[:8]}",
-                    'user_id': uid,
-                    'student_id_number': student_id,
-                    'course': course,
-                    'year_section': year_sec,
-                    'emergency_contact': em_contact
-                }).execute()
-            elif user_data['role'] == 'counselor':
-                cls._supabase_client.table('counselor_profiles').insert({
-                    'id': f"cprof-{uuid.uuid4().hex[:8]}",
-                    'user_id': uid,
-                    'title': user_data.get('title', 'Registered Guidance Counselor'),
-                    'room': user_data.get('room', 'Guidance Office Rm 204'),
-                    'specialization': user_data.get('specialization', 'General Guidance'),
-                    'max_daily_appointments': int(user_data.get('max_daily_appointments') or user_data.get('max_appointments') or 5),
-                    'bio': user_data.get('bio', ''),
-                    'is_active': True
-                }).execute()
-            return user_data
+    @classmethod
+    def update_user(cls, user_id: str, data: dict) -> dict:
+        """Updates account and role-specific profile fields. Unknown keys are ignored."""
+        user = cls.get_user_by_id(user_id)
+        if not user:
+            return None
+        user_fields = {k: data[k] for k in ('name', 'email', 'phone', 'avatar_initial') if k in data}
+        if 'email' in user_fields:
+            user_fields['email'] = user_fields['email'].strip().lower()
+        allowed = cls.STUDENT_PROFILE_FIELDS if user['role'] == 'student' else (
+            cls.COUNSELOR_PROFILE_FIELDS if user['role'] == 'counselor' else ())
+        profile_fields = {k: data[k] for k in allowed if k in data}
+        table = cls._profile_table(user['role'])
 
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO users (id, email, password_hash, name, role, avatar_initial, status, phone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            uid,
-            user_data['email'].lower(),
-            user_data['password_hash'],
-            user_data['name'],
-            user_data['role'],
-            user_data.get('avatar_initial') or user_data['name'][:2].upper(),
-            user_data.get('status', 'active'),
-            user_data.get('phone', '')
-        ))
+        if cls._use_supabase:
+            if user_fields:
+                cls._sb().table('users').update({**user_fields, 'updated_at': cls._now()}).eq('id', user_id).execute()
+            if profile_fields and table:
+                if user.get('profile_id'):
+                    cls._sb().table(table).update(profile_fields).eq('user_id', user_id).execute()
+            return cls.get_user_by_id(user_id)
 
-        if user_data['role'] == 'student':
-            student_id = user_data.get('student_id_number') or user_data.get('studentId') or user_data.get('student_id') or f"BCC-2026-{uuid.uuid4().hex[:5].upper()}"
-            year_sec = user_data.get('year_section') or user_data.get('yearSection') or '1A'
-            em_contact = user_data.get('emergency_contact') or user_data.get('emergencyContact') or ''
-            course = user_data.get('course') or 'BSIT'
+        with cls._tx() as cur:
+            if user_fields:
+                sets = ', '.join(f"{k} = ?" for k in user_fields)
+                cur.execute(f"UPDATE users SET {sets}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                            (*user_fields.values(), user_id))
+            if profile_fields and table and user.get('profile_id'):
+                sets = ', '.join(f"{k} = ?" for k in profile_fields)
+                cur.execute(f"UPDATE {table} SET {sets} WHERE user_id = ?", (*profile_fields.values(), user_id))
+        return cls.get_user_by_id(user_id)
 
-            cur.execute("""
-                INSERT INTO student_profiles (id, user_id, student_id_number, course, year_section, emergency_contact)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                f"prof-{uuid.uuid4().hex[:8]}",
-                uid,
-                student_id,
-                course,
-                year_sec,
-                em_contact
-            ))
-        elif user_data['role'] == 'counselor':
-            cur.execute("""
-                INSERT INTO counselor_profiles (id, user_id, title, room, specialization, max_daily_appointments, bio, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                f"cprof-{uuid.uuid4().hex[:8]}",
-                uid,
-                user_data.get('title', 'Registered Guidance Counselor'),
-                user_data.get('room', 'Guidance Office Rm 204'),
-                user_data.get('specialization', 'General Guidance'),
-                int(user_data.get('max_daily_appointments') or user_data.get('max_appointments') or 5),
-                user_data.get('bio', ''),
-                1
-            ))
-        conn.commit()
-        conn.close()
-        return user_data
+    @classmethod
+    def update_user_password(cls, user_id: str, new_password_hash: str):
+        if cls._use_supabase:
+            cls._sb().table('users').update({'password_hash': new_password_hash, 'updated_at': cls._now()}).eq('id', user_id).execute()
+            return
+        with cls._tx() as cur:
+            cur.execute("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new_password_hash, user_id))
 
-    # ── Services ──
+    @classmethod
+    def set_user_status(cls, user_id: str, new_status: str) -> dict:
+        if cls._use_supabase:
+            cls._sb().table('users').update({'status': new_status, 'updated_at': cls._now()}).eq('id', user_id).execute()
+        else:
+            with cls._tx() as cur:
+                cur.execute("UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new_status, user_id))
+        return cls.get_user_by_id(user_id)
+
+    @classmethod
+    def count_user_links(cls, user_id: str) -> int:
+        """Appointments, case notes and follow-ups that reference this user."""
+        if cls._use_supabase:
+            total = 0
+            for table, cols in (('appointments', ('student_id', 'counselor_id')),
+                                ('counseling_session_records', ('student_id', 'counselor_id')),
+                                ('follow_up_tasks', ('student_id', 'counselor_id'))):
+                for col in cols:
+                    total += cls._sb().table(table).select('id', count='exact').eq(col, user_id).execute().count or 0
+            return total
+        row = cls._query_one("""
+            SELECT (SELECT COUNT(*) FROM appointments WHERE student_id = ?1 OR counselor_id = ?1)
+                 + (SELECT COUNT(*) FROM counseling_session_records WHERE student_id = ?1 OR counselor_id = ?1)
+                 + (SELECT COUNT(*) FROM follow_up_tasks WHERE student_id = ?1 OR counselor_id = ?1) AS n
+        """, (user_id,))
+        return row['n'] if row else 0
+
+    @classmethod
+    def delete_user(cls, user_id: str):
+        if cls._use_supabase:
+            cls._sb().table('notifications').delete().eq('recipient_id', user_id).execute()
+            cls._sb().table('counselor_availability').delete().eq('counselor_id', user_id).execute()
+            cls._sb().table('users').delete().eq('id', user_id).execute()
+            return
+        with cls._tx() as cur:
+            for sql in ("DELETE FROM notifications WHERE recipient_id = ?",
+                        "DELETE FROM counselor_availability WHERE counselor_id = ?",
+                        "DELETE FROM student_profiles WHERE user_id = ?",
+                        "DELETE FROM counselor_profiles WHERE user_id = ?",
+                        "DELETE FROM users WHERE id = ?"):
+                cur.execute(sql, (user_id,))
+
+    # ══════════════════════════════════════════════════════════════════
+    # Guidance services
+    # ══════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _clean_service(s: dict) -> dict:
+        if s is not None:
+            s['is_active'] = bool(s.get('is_active'))
+        return s
 
     @classmethod
     def get_services(cls, active_only: bool = True) -> list:
         if cls._use_supabase:
-            q = cls._supabase_client.table('guidance_services').select('*')
+            q = cls._sb().table('guidance_services').select('*')
             if active_only:
                 q = q.eq('is_active', True)
-            return q.order('created_at').execute().data
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        if active_only:
-            cur.execute("SELECT * FROM guidance_services WHERE is_active = 1 ORDER BY created_at")
+            rows = q.order('created_at').execute().data or []
         else:
-            cur.execute("SELECT * FROM guidance_services ORDER BY created_at")
-        rows = [dict(r) for r in cur.fetchall()]
-        conn.close()
-        return rows
+            rows = cls._query("SELECT * FROM guidance_services" + (" WHERE is_active = 1" if active_only else "") + " ORDER BY created_at, title")
+        return [cls._clean_service(r) for r in rows]
 
     @classmethod
     def get_service_by_id(cls, srv_id: str) -> dict:
         if cls._use_supabase:
-            res = cls._supabase_client.table('guidance_services').select('*').eq('id', srv_id).execute()
-            return res.data[0] if res.data else None
+            res = cls._sb().table('guidance_services').select('*').eq('id', srv_id).execute()
+            return cls._clean_service(res.data[0]) if res.data else None
+        return cls._clean_service(cls._query_one("SELECT * FROM guidance_services WHERE id = ?", (srv_id,)))
 
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM guidance_services WHERE id = ?", (srv_id,))
-        row = cur.fetchone()
-        conn.close()
-        return dict(row) if row else None
+    @classmethod
+    def get_service_by_code(cls, code: str) -> dict:
+        if cls._use_supabase:
+            res = cls._sb().table('guidance_services').select('*').eq('code', code).execute()
+            return cls._clean_service(res.data[0]) if res.data else None
+        return cls._clean_service(cls._query_one("SELECT * FROM guidance_services WHERE code = ?", (code,)))
 
-    # ── Counselors ──
+    @classmethod
+    def save_guidance_service(cls, data: dict) -> dict:
+        """Creates a service, or updates it when data['id'] names an existing one."""
+        sid = data.get('id') or cls.new_id('srv')
+        record = {
+            'id': sid,
+            'code': data['code'],
+            'title': data['title'],
+            'description': data['description'],
+            'category': data.get('category', 'General'),
+            'duration_minutes': int(data.get('duration_minutes', 45)),
+            'icon': data.get('icon', 'book-open'),
+            'confidentiality_level': data.get('confidentiality_level', 'Confidential'),
+            'is_active': bool(data.get('is_active', True))
+        }
+        if cls._use_supabase:
+            cls._sb().table('guidance_services').upsert(record).execute()
+            return cls.get_service_by_id(sid)
+
+        record['is_active'] = 1 if record['is_active'] else 0
+        cols = ', '.join(record)
+        updates = ', '.join(f"{k} = excluded.{k}" for k in record if k != 'id')
+        with cls._tx() as cur:
+            cur.execute(f"INSERT INTO guidance_services ({cols}) VALUES ({', '.join('?' * len(record))}) "
+                        f"ON CONFLICT(id) DO UPDATE SET {updates}", tuple(record.values()))
+        return cls.get_service_by_id(sid)
+
+    @classmethod
+    def service_in_use(cls, srv_id: str) -> bool:
+        if cls._use_supabase:
+            return (cls._sb().table('appointments').select('id', count='exact').eq('service_id', srv_id).execute().count or 0) > 0
+        return cls._query_one("SELECT 1 AS x FROM appointments WHERE service_id = ? LIMIT 1", (srv_id,)) is not None
+
+    @classmethod
+    def delete_service(cls, srv_id: str):
+        if cls._use_supabase:
+            cls._sb().table('guidance_services').delete().eq('id', srv_id).execute()
+            return
+        with cls._tx() as cur:
+            cur.execute("DELETE FROM guidance_services WHERE id = ?", (srv_id,))
+
+    # ══════════════════════════════════════════════════════════════════
+    # Counselors & availability
+    # ══════════════════════════════════════════════════════════════════
 
     @classmethod
     def get_counselors(cls) -> list:
         if cls._use_supabase:
-            counselors = []
-            try:
-                res = cls._supabase_client.table('users').select('*, counselor_profiles(*)').eq('role', 'counselor').eq('status', 'active').execute()
-                users_list = res.data or []
-            except Exception as e:
-                print(f"[Supabase] get_counselors join fallback: {e}")
-                res = cls._supabase_client.table('users').select('*').eq('role', 'counselor').eq('status', 'active').execute()
-                users_list = res.data or []
-
-            for u in users_list:
-                cp = u.get('counselor_profiles')
-                if isinstance(cp, list):
-                    prof = cp[0] if len(cp) > 0 else {}
-                elif isinstance(cp, dict):
-                    prof = cp
-                else:
-                    try:
-                        p_res = cls._supabase_client.table('counselor_profiles').select('*').eq('user_id', u['id']).execute()
-                        prof = p_res.data[0] if p_res.data else {}
-                    except Exception:
-                        prof = {}
-                prof_clean = {k: v for k, v in prof.items() if k != 'id'}
-                counselors.append({**u, **prof_clean, 'profile_id': prof.get('id')})
-            return counselors
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("""
+            res = cls._sb().table('users').select(
+                'id, email, name, avatar_initial, phone, counselor_profiles(title, room, specialization, max_daily_appointments, bio)'
+            ).eq('role', 'counselor').eq('status', 'active').execute()
+            out = []
+            for u in (res.data or []):
+                cp = cls._first(u.pop('counselor_profiles', None))
+                out.append({**u, **cp})
+            return out
+        return cls._query("""
             SELECT u.id, u.email, u.name, u.avatar_initial, u.phone,
                    cp.title, cp.room, cp.specialization, cp.max_daily_appointments, cp.bio
             FROM users u
             JOIN counselor_profiles cp ON u.id = cp.user_id
             WHERE u.role = 'counselor' AND u.status = 'active'
+            ORDER BY u.name
         """)
-        rows = [dict(r) for r in cur.fetchall()]
-        conn.close()
-        return rows
-
-    # ── Appointments ──
 
     @classmethod
-    def get_appointments(cls, student_id=None, counselor_id=None, status=None, search=None) -> list:
+    def get_availability(cls, counselor_id: str) -> dict:
+        """Returns {1..5: bool} for Monday..Friday. Days without a row count as available."""
         if cls._use_supabase:
-            data_list = []
-            try:
-                q = cls._supabase_client.table('appointments').select("""
-                    *,
-                    student:users!appointments_student_id_fkey(name, email, phone),
-                    counselor:users!appointments_counselor_id_fkey(name, email),
-                    service:guidance_services(title, category, duration_minutes)
-                """)
-                if student_id:
-                    q = q.eq('student_id', student_id)
-                if counselor_id:
-                    q = q.eq('counselor_id', counselor_id)
-                if status and status != 'All':
-                    q = q.eq('status', status)
-                res = q.order('date', desc=True).execute()
-                data_list = res.data or []
-            except Exception as e:
-                print(f"[Supabase] appointments joined query fallback: {e}")
-                q = cls._supabase_client.table('appointments').select('*')
-                if student_id:
-                    q = q.eq('student_id', student_id)
-                if counselor_id:
-                    q = q.eq('counselor_id', counselor_id)
-                if status and status != 'All':
-                    q = q.eq('status', status)
-                res = q.order('date', desc=True).execute()
-                data_list = res.data or []
+            rows = cls._sb().table('counselor_availability').select('day_of_week, is_available').eq('counselor_id', counselor_id).execute().data or []
+        else:
+            rows = cls._query("SELECT day_of_week, is_available FROM counselor_availability WHERE counselor_id = ?", (counselor_id,))
+        days = {d: True for d in range(1, 6)}
+        for r in rows:
+            if 1 <= int(r['day_of_week']) <= 5:
+                days[int(r['day_of_week'])] = bool(r['is_available'])
+        return days
 
-            users_cache = {}
-            services_cache = {}
+    @classmethod
+    def set_availability(cls, counselor_id: str, days: dict):
+        rows = [{
+            'id': cls.new_id('avail'),
+            'counselor_id': counselor_id,
+            'day_of_week': d,
+            'is_available': bool(days.get(d, True))
+        } for d in range(1, 6)]
+        if cls._use_supabase:
+            cls._sb().table('counselor_availability').delete().eq('counselor_id', counselor_id).execute()
+            cls._sb().table('counselor_availability').insert(rows).execute()
+            return
+        with cls._tx() as cur:
+            cur.execute("DELETE FROM counselor_availability WHERE counselor_id = ?", (counselor_id,))
+            cur.executemany(
+                "INSERT INTO counselor_availability (id, counselor_id, day_of_week, is_available) VALUES (?, ?, ?, ?)",
+                [(r['id'], r['counselor_id'], r['day_of_week'], 1 if r['is_available'] else 0) for r in rows])
 
-            out = []
-            for a in data_list:
-                std_info = a.get('student')
-                if not std_info and a.get('student_id'):
-                    sid = a['student_id']
-                    if sid not in users_cache:
-                        try:
-                            u_res = cls._supabase_client.table('users').select('name, email, phone').eq('id', sid).execute()
-                            users_cache[sid] = u_res.data[0] if u_res.data else {}
-                        except Exception:
-                            users_cache[sid] = {}
-                    std_info = users_cache[sid]
+    # ══════════════════════════════════════════════════════════════════
+    # Appointments
+    # ══════════════════════════════════════════════════════════════════
 
-                cns_info = a.get('counselor')
-                if not cns_info and a.get('counselor_id'):
-                    cid = a['counselor_id']
-                    if cid not in users_cache:
-                        try:
-                            u_res = cls._supabase_client.table('users').select('name, email').eq('id', cid).execute()
-                            users_cache[cid] = u_res.data[0] if u_res.data else {}
-                        except Exception:
-                            users_cache[cid] = {}
-                    cns_info = users_cache[cid]
+    @staticmethod
+    def _apt_aliases(d: dict) -> dict:
+        """Adds the camelCase names the frontend reads alongside the database columns."""
+        d['referenceCode'] = d.get('reference_code')
+        d['timeSlot'] = d.get('time_slot')
+        d['studentId'] = d.get('student_id')
+        d['counselorId'] = d.get('counselor_id')
+        d['serviceId'] = d.get('service_id')
+        d['location'] = d.get('location_or_link')
+        d['cancellationReason'] = d.get('cancellation_reason')
+        d['courseYear'] = f"{d.get('studentCourse') or ''} {d.get('studentYearSection') or ''}".strip()
+        d['hasFeedback'] = d.get('feedbackRating') is not None
+        return d
 
-                srv_info = a.get('service')
-                if not srv_info and a.get('service_id'):
-                    svid = a['service_id']
-                    if svid not in services_cache:
-                        try:
-                            sv_res = cls._supabase_client.table('guidance_services').select('title, category, duration_minutes').eq('id', svid).execute()
-                            services_cache[svid] = sv_res.data[0] if sv_res.data else {}
-                        except Exception:
-                            services_cache[svid] = {}
-                    srv_info = services_cache[svid]
+    @classmethod
+    def _fetch_appointments(cls, student_id=None, counselor_id=None, status=None, search=None,
+                            apt_id=None, date=None) -> list:
+        if cls._use_supabase:
+            return cls._fetch_appointments_supabase(student_id, counselor_id, status, search, apt_id, date)
 
-                std_name = std_info.get('name', 'Student') if std_info else 'Student'
-                cns_name = cns_info.get('name', 'Counselor') if cns_info else 'Counselor'
-                srv_title = srv_info.get('title', 'Service') if srv_info else 'Service'
-                ref = a.get('reference_code', '')
-                
-                if search:
-                    term = search.lower()
-                    if (term not in std_name.lower() and
-                        term not in ref.lower() and
-                        term not in srv_title.lower() and
-                        term not in cns_name.lower()):
-                        continue
-
-                out.append({
-                    **a,
-                    'referenceCode': ref,
-                    'timeSlot': a.get('time_slot', ''),
-                    'studentId': a.get('student_id', ''),
-                    'counselorId': a.get('counselor_id', ''),
-                    'serviceId': a.get('service_id', ''),
-                    'studentName': std_name,
-                    'studentEmail': std_info.get('email', '') if std_info else '',
-                    'counselorName': cns_name,
-                    'serviceTitle': srv_title,
-                    'location': a.get('location_or_link', 'Guidance Office Rm 204')
-                })
-            return out
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
         query = """
             SELECT a.*,
-                   u_std.name as studentName, u_std.email as studentEmail, sp.course as studentCourse,
-                   sp.student_id_number as studentNumber, sp.year_section as studentYearSection,
-                   u_cns.name as counselorName, cp.room as counselorRoom,
-                   gs.title as serviceTitle, gs.duration_minutes as durationMinutes
+                   u_std.name AS studentName, u_std.email AS studentEmail, u_std.phone AS studentPhone,
+                   sp.course AS studentCourse, sp.student_id_number AS studentNumber, sp.year_section AS studentYearSection,
+                   u_cns.name AS counselorName, cp.room AS counselorRoom,
+                   gs.title AS serviceTitle, gs.category AS serviceCategory, gs.duration_minutes AS durationMinutes,
+                   fb.rating AS feedbackRating, fb.comments AS feedbackComments
             FROM appointments a
             JOIN users u_std ON a.student_id = u_std.id
             LEFT JOIN student_profiles sp ON u_std.id = sp.user_id
             JOIN users u_cns ON a.counselor_id = u_cns.id
             LEFT JOIN counselor_profiles cp ON u_cns.id = cp.user_id
-            JOIN guidance_services gs ON a.service_id = gs.id
+            LEFT JOIN guidance_services gs ON a.service_id = gs.id
+            LEFT JOIN appointment_feedback fb ON fb.appointment_id = a.id
             WHERE 1=1
         """
         params = []
+        if apt_id:
+            query += " AND (a.id = ? OR a.reference_code = ?)"
+            params += [apt_id, apt_id]
         if student_id:
             query += " AND a.student_id = ?"
             params.append(student_id)
@@ -823,930 +817,536 @@ class DBService:
         if status and status != 'All':
             query += " AND a.status = ?"
             params.append(status)
+        if date:
+            query += " AND a.date = ?"
+            params.append(date)
         if search:
-            query += " AND (u_std.name LIKE ? OR a.reference_code LIKE ? OR gs.title LIKE ?)"
             term = f"%{search}%"
-            params.extend([term, term, term])
-
+            query += " AND (u_std.name LIKE ? OR a.reference_code LIKE ? OR gs.title LIKE ? OR u_cns.name LIKE ?)"
+            params += [term, term, term, term]
         query += " ORDER BY a.date DESC, a.created_at DESC"
-        cur.execute(query, params)
-        rows = []
-        for r in cur.fetchall():
-            d = dict(r)
-            d['referenceCode'] = d.get('reference_code')
-            d['timeSlot'] = d.get('time_slot')
-            d['studentId'] = d.get('student_id')
-            d['counselorId'] = d.get('counselor_id')
-            d['serviceId'] = d.get('service_id')
-            d['location'] = d.get('location_or_link')
-            d['courseYear'] = f"{d.get('studentCourse', 'BSIT')} {d.get('studentYearSection', '')}".strip()
-            rows.append(d)
-        conn.close()
-        return rows
+        return [cls._apt_aliases(r) for r in cls._query(query, params)]
+
+    @classmethod
+    def _fetch_appointments_supabase(cls, student_id, counselor_id, status, search, apt_id, date) -> list:
+        def base():
+            q = cls._sb().table('appointments').select('*')
+            if student_id:
+                q = q.eq('student_id', student_id)
+            if counselor_id:
+                q = q.eq('counselor_id', counselor_id)
+            if status and status != 'All':
+                q = q.eq('status', status)
+            if date:
+                q = q.eq('date', date)
+            return q
+
+        if apt_id:
+            if not cls.valid_id(apt_id):
+                return []
+            rows = base().eq('id', apt_id).execute().data or []
+            if not rows:
+                rows = base().eq('reference_code', apt_id).execute().data or []
+        else:
+            rows = base().order('date', desc=True).execute().data or []
+        if not rows:
+            return []
+
+        # Batched lookups instead of one request per row
+        user_ids = list({r['student_id'] for r in rows} | {r['counselor_id'] for r in rows})
+        users = {u['id']: u for u in (cls._sb().table('users').select('id, name, email, phone').in_('id', user_ids).execute().data or [])}
+        sprof = {p['user_id']: p for p in (cls._sb().table('student_profiles').select('user_id, course, student_id_number, year_section')
+                                           .in_('user_id', user_ids).execute().data or [])}
+        cprof = {p['user_id']: p for p in (cls._sb().table('counselor_profiles').select('user_id, room').in_('user_id', user_ids).execute().data or [])}
+        services = {s['id']: s for s in (cls._sb().table('guidance_services').select('id, title, category, duration_minutes')
+                                         .in_('id', list({r['service_id'] for r in rows})).execute().data or [])}
+        feedback = {f['appointment_id']: f for f in (cls._sb().table('appointment_feedback').select('appointment_id, rating, comments')
+                                                     .in_('appointment_id', [r['id'] for r in rows]).execute().data or [])}
+        out = []
+        for a in rows:
+            std, cns = users.get(a['student_id'], {}), users.get(a['counselor_id'], {})
+            sp, cp = sprof.get(a['student_id'], {}), cprof.get(a['counselor_id'], {})
+            srv, fb = services.get(a['service_id'], {}), feedback.get(a['id'])
+            d = {
+                **a,
+                'studentName': std.get('name', 'Student'), 'studentEmail': std.get('email', ''), 'studentPhone': std.get('phone', ''),
+                'studentCourse': sp.get('course'), 'studentNumber': sp.get('student_id_number'), 'studentYearSection': sp.get('year_section'),
+                'counselorName': cns.get('name', 'Counselor'), 'counselorRoom': cp.get('room'),
+                'serviceTitle': srv.get('title', 'Service'), 'serviceCategory': srv.get('category'), 'durationMinutes': srv.get('duration_minutes', 45),
+                'feedbackRating': fb.get('rating') if fb else None, 'feedbackComments': fb.get('comments') if fb else None
+            }
+            if search:
+                term = search.lower()
+                haystack = ' '.join(str(x or '') for x in (d['studentName'], d.get('reference_code'), d['serviceTitle'], d['counselorName'])).lower()
+                if term not in haystack:
+                    continue
+            out.append(cls._apt_aliases(d))
+        return out
+
+    @classmethod
+    def get_appointments(cls, student_id=None, counselor_id=None, status=None, search=None, date=None) -> list:
+        return cls._fetch_appointments(student_id=student_id, counselor_id=counselor_id, status=status, search=search, date=date)
 
     @classmethod
     def get_appointment_by_id(cls, apt_id: str) -> dict:
+        rows = cls._fetch_appointments(apt_id=apt_id)
+        return rows[0] if rows else None
+
+    @classmethod
+    def booked_slots(cls, counselor_id: str, date: str, exclude_id: str = None) -> set:
+        """Time slots already held (Pending/Approved) by a counselor on a date."""
         if cls._use_supabase:
-            data_list = []
-            try:
-                res = cls._supabase_client.table('appointments').select("""
-                    *,
-                    student:users!appointments_student_id_fkey(name, email, phone),
-                    counselor:users!appointments_counselor_id_fkey(name, email),
-                    service:guidance_services(title, category, duration_minutes)
-                """).or_(f"id.eq.{apt_id},reference_code.eq.{apt_id}").execute()
-                data_list = res.data or []
-            except Exception as e:
-                print(f"[Supabase] appointment by id join fallback: {e}")
-                res = cls._supabase_client.table('appointments').select('*').or_(f"id.eq.{apt_id},reference_code.eq.{apt_id}").execute()
-                data_list = res.data or []
+            rows = cls._sb().table('appointments').select('id, time_slot').eq('counselor_id', counselor_id) \
+                .eq('date', date).in_('status', ['Pending', 'Approved']).execute().data or []
+        else:
+            rows = cls._query("SELECT id, time_slot FROM appointments WHERE counselor_id = ? AND date = ? AND status IN ('Pending', 'Approved')",
+                              (counselor_id, date))
+        return {r['time_slot'] for r in rows if r['id'] != exclude_id}
 
-            if not data_list:
-                return None
-            a = data_list[0]
-
-            student_info = a.get('student')
-            if not student_info and a.get('student_id'):
-                try:
-                    s_res = cls._supabase_client.table('users').select('name, email, phone').eq('id', a['student_id']).execute()
-                    student_info = s_res.data[0] if s_res.data else {}
-                except Exception:
-                    student_info = {}
-
-            counselor_info = a.get('counselor')
-            if not counselor_info and a.get('counselor_id'):
-                try:
-                    c_res = cls._supabase_client.table('users').select('name, email').eq('id', a['counselor_id']).execute()
-                    counselor_info = c_res.data[0] if c_res.data else {}
-                except Exception:
-                    counselor_info = {}
-
-            service_info = a.get('service')
-            if not service_info and a.get('service_id'):
-                try:
-                    srv_res = cls._supabase_client.table('guidance_services').select('title, category, duration_minutes').eq('id', a['service_id']).execute()
-                    service_info = srv_res.data[0] if srv_res.data else {}
-                except Exception:
-                    service_info = {}
-
-            sp_data = {}
-            if a.get('student_id'):
-                try:
-                    sp = cls._supabase_client.table('student_profiles').select('*').eq('user_id', a['student_id']).execute()
-                    sp_data = sp.data[0] if sp.data else {}
-                except Exception:
-                    pass
-
-            cp_data = {}
-            if a.get('counselor_id'):
-                try:
-                    cp = cls._supabase_client.table('counselor_profiles').select('*').eq('user_id', a['counselor_id']).execute()
-                    cp_data = cp.data[0] if cp.data else {}
-                except Exception:
-                    pass
-            
-            std_name = student_info.get('name', 'Student') if student_info else 'Student'
-            cns_name = counselor_info.get('name', 'Counselor') if counselor_info else 'Counselor'
-            srv_title = service_info.get('title', 'Service') if service_info else 'Service'
-            
-            return {
-                **a,
-                'referenceCode': a.get('reference_code'),
-                'timeSlot': a.get('time_slot'),
-                'studentId': a.get('student_id'),
-                'counselorId': a.get('counselor_id'),
-                'serviceId': a.get('service_id'),
-                'location': a.get('location_or_link', 'Guidance Office Rm 204'),
-                'studentName': std_name,
-                'studentEmail': student_info.get('email', '') if student_info else '',
-                'studentPhone': student_info.get('phone', '') if student_info else '',
-                'studentCourse': sp_data.get('course', 'BSIT'),
-                'studentNumber': sp_data.get('student_id_number', ''),
-                'courseYear': f"{sp_data.get('course', 'BSIT')} {sp_data.get('year_section', '')}".strip(),
-                'counselorName': cns_name,
-                'counselorRoom': cp_data.get('room', 'Guidance Office Rm 204'),
-                'serviceTitle': srv_title,
-                'durationMinutes': service_info.get('duration_minutes', 45) if service_info else 45
-            }
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT a.*,
-                   u_std.name as studentName, u_std.email as studentEmail, sp.course as studentCourse,
-                   sp.student_id_number as studentNumber, sp.year_section as studentYearSection,
-                   u_cns.name as counselorName, cp.room as counselorRoom,
-                   gs.title as serviceTitle
-            FROM appointments a
-            JOIN users u_std ON a.student_id = u_std.id
-            LEFT JOIN student_profiles sp ON u_std.id = sp.user_id
-            JOIN users u_cns ON a.counselor_id = u_cns.id
-            LEFT JOIN counselor_profiles cp ON u_cns.id = cp.user_id
-            JOIN guidance_services gs ON a.service_id = gs.id
-            WHERE a.id = ? OR a.reference_code = ?
-        """, (apt_id, apt_id))
-        row = cur.fetchone()
-        conn.close()
-        if not row:
-            return None
-        d = dict(row)
-        d['referenceCode'] = d.get('reference_code')
-        d['timeSlot'] = d.get('time_slot')
-        d['studentId'] = d.get('student_id')
-        d['counselorId'] = d.get('counselor_id')
-        d['serviceId'] = d.get('service_id')
-        d['location'] = d.get('location_or_link')
-        d['courseYear'] = f"{d.get('studentCourse', 'BSIT')} {d.get('studentYearSection', '')}".strip()
-        return d
+    @classmethod
+    def count_active_for_student(cls, student_id: str, from_date: str) -> int:
+        if cls._use_supabase:
+            return cls._sb().table('appointments').select('id', count='exact').eq('student_id', student_id) \
+                .in_('status', ['Pending', 'Approved']).gte('date', from_date).execute().count or 0
+        row = cls._query_one("SELECT COUNT(*) AS n FROM appointments WHERE student_id = ? AND status IN ('Pending', 'Approved') AND date >= ?",
+                             (student_id, from_date))
+        return row['n']
 
     @classmethod
     def create_appointment(cls, data: dict) -> dict:
-        """
-        Creates an appointment with transaction-level double booking check and validation.
-        Normalizes modality and urgency to satisfy check constraints.
-        """
-        counselor_id = data['counselor_id']
-        date = data['date']
-        time_slot = data['time_slot']
-
-        # Modality normalization to match CHECK (modality IN ('In-Person', 'Online (Google Meet)', 'Phone Call'))
-        raw_modality = str(data.get('modality', 'In-Person')).strip()
-        if 'meet' in raw_modality.lower() or 'online' in raw_modality.lower() or 'video' in raw_modality.lower():
-            modality = 'Online (Google Meet)'
-        elif 'phone' in raw_modality.lower() or 'call' in raw_modality.lower():
-            modality = 'Phone Call'
-        else:
-            modality = 'In-Person'
-
-        # Urgency normalization to match CHECK (urgency IN ('Routine', 'Urgent', 'Crisis Intervention'))
-        raw_urgency = str(data.get('urgency', 'Routine')).strip()
-        if 'crisis' in raw_urgency.lower() or 'emergency' in raw_urgency.lower():
-            urgency = 'Crisis Intervention'
-        elif 'urgent' in raw_urgency.lower() or 'high' in raw_urgency.lower() or 'immediate' in raw_urgency.lower():
-            urgency = 'Urgent'
-        else:
-            urgency = 'Routine'
-
-        location = data.get('location_or_link') or ('meet.google.com/bcc-guidance' if modality == 'Online (Google Meet)' else 'Guidance Office Rm 204')
-
-        student_id = data['student_id']
-        counselor_id = data['counselor_id']
+        """Inserts a validated booking. Raises ValueError when the slot was taken in the meantime."""
+        apt_id = cls.new_id('apt')
+        ref = f"BCC-APT-{data['date'].replace('-', '')}-{uuid.uuid4().hex[:4].upper()}"
+        conflict_msg = f"This counselor is already booked on {data['date']} at {data['time_slot']}. Please pick another time."
+        row = {
+            'id': apt_id, 'reference_code': ref,
+            'student_id': data['student_id'], 'counselor_id': data['counselor_id'], 'service_id': data['service_id'],
+            'date': data['date'], 'time_slot': data['time_slot'],
+            'modality': data['modality'], 'urgency': data['urgency'], 'reason': data['reason'],
+            'status': 'Pending', 'location_or_link': data['location_or_link']
+        }
+        history = {
+            'id': cls.new_id('hist'), 'appointment_id': apt_id, 'old_status': None, 'new_status': 'Pending',
+            'changed_by_user_id': data['student_id'], 'comments': 'Appointment submitted by student'
+        }
 
         if cls._use_supabase:
-            # Check student exists (or resolve from profile id)
-            std_chk = cls._supabase_client.table('users').select('id, name').eq('id', student_id).execute()
-            if not std_chk.data:
-                sp_chk = cls._supabase_client.table('student_profiles').select('user_id').eq('id', student_id).execute()
-                if sp_chk.data:
-                    student_id = sp_chk.data[0]['user_id']
-                    data['student_id'] = student_id
-                else:
-                    raise ValueError(f"Student account not found (id: {data['student_id']}).")
-
-            # Check counselor exists (or resolve from profile id)
-            cns_chk = cls._supabase_client.table('users').select('id, name').eq('id', counselor_id).execute()
-            if not cns_chk.data:
-                cp_chk = cls._supabase_client.table('counselor_profiles').select('user_id').eq('id', counselor_id).execute()
-                if cp_chk.data:
-                    counselor_id = cp_chk.data[0]['user_id']
-                    data['counselor_id'] = counselor_id
-                else:
-                    raise ValueError(f"Counselor account not found (id: {data['counselor_id']}).")
-
-            # Check service exists
-            srv_chk = cls._supabase_client.table('guidance_services').select('id, title').eq('id', data['service_id']).execute()
-            if not srv_chk.data:
-                raise ValueError(f"Guidance service not found (id: {data['service_id']}).")
-
-            # Check for conflict
-            conflict = cls._supabase_client.table('appointments').select('id')\
-                .eq('counselor_id', counselor_id)\
-                .eq('date', date)\
-                .eq('time_slot', time_slot)\
-                .in_('status', ['Pending', 'Approved']).execute()
-            if conflict.data:
-                raise ValueError(f"Selected counselor already has a reserved session on {date} at {time_slot}. Please select another slot.")
-
-            apt_id = data.get('id') or f"apt-{uuid.uuid4().hex[:8]}"
-            date_clean = date.replace('-', '')
-            ref = data.get('reference_code') or f"BCC-APT-{date_clean}-{uuid.uuid4().hex[:4].upper()}"
-
-            new_apt = {
-                'id': apt_id,
-                'reference_code': ref,
-                'student_id': student_id,
-                'counselor_id': counselor_id,
-                'service_id': data['service_id'],
-                'date': date,
-                'time_slot': time_slot,
-                'modality': modality,
-                'urgency': urgency,
-                'reason': data['reason'],
-                'status': 'Pending',
-                'location_or_link': location
-            }
-            cls._supabase_client.table('appointments').insert(new_apt).execute()
-
-            # Record history in Supabase
+            if data['time_slot'] in cls.booked_slots(data['counselor_id'], data['date']):
+                raise ValueError(conflict_msg)
             try:
-                cls._supabase_client.table('appointment_status_history').insert({
-                    'id': f"hist-{uuid.uuid4().hex[:8]}",
-                    'appointment_id': apt_id,
-                    'old_status': None,
-                    'new_status': 'Pending',
-                    'changed_by_user_id': student_id,
-                    'comments': 'Appointment submitted by student'
-                }).execute()
+                cls._sb().table('appointments').insert(row).execute()
             except Exception as e:
-                print(f"[Supabase] History log notice: {e}")
-
-            # Create notification for counselor in Supabase
-            try:
-                cls._supabase_client.table('notifications').insert({
-                    'id': f"notif-{uuid.uuid4().hex[:8]}",
-                    'recipient_id': counselor_id,
-                    'title': 'New Appointment Request',
-                    'message': f"New request submitted for {date} at {time_slot} (Ref: {ref})",
-                    'type': 'appointment',
-                    'link': 'counselor/appointments.html'
-                }).execute()
-            except Exception as e:
-                print(f"[Supabase] Notification notice: {e}")
-
+                if 'duplicate' in str(e).lower() or '23505' in str(e):
+                    raise ValueError(conflict_msg)
+                raise
+            cls._sb().table('appointment_status_history').insert(history).execute()
             return cls.get_appointment_by_id(apt_id)
 
-        conn = cls.get_connection()
-        cur = conn.cursor()
         try:
-            # Check student exists (or resolve from profile id)
-            cur.execute("SELECT id FROM users WHERE id = ?", (student_id,))
-            if not cur.fetchone():
-                cur.execute("SELECT user_id FROM student_profiles WHERE id = ?", (student_id,))
-                sp_row = cur.fetchone()
-                if sp_row:
-                    student_id = sp_row[0]
-                    data['student_id'] = student_id
-                else:
-                    raise ValueError(f"Student account not found (id: {data['student_id']}).")
-
-            # Check counselor exists (or resolve from profile id)
-            cur.execute("SELECT id FROM users WHERE id = ?", (counselor_id,))
-            if not cur.fetchone():
-                cur.execute("SELECT user_id FROM counselor_profiles WHERE id = ?", (counselor_id,))
-                cp_row = cur.fetchone()
-                if cp_row:
-                    counselor_id = cp_row[0]
-                    data['counselor_id'] = counselor_id
-                else:
-                    raise ValueError(f"Counselor account not found (id: {data['counselor_id']}).")
-
-            # Check service exists
-            cur.execute("SELECT id FROM guidance_services WHERE id = ?", (data['service_id'],))
-            if not cur.fetchone():
-                raise ValueError(f"Guidance service not found (id: {data['service_id']}).")
-
-            # Double booking check within transaction
-            cur.execute("""
-                SELECT id FROM appointments 
-                WHERE counselor_id = ? AND date = ? AND time_slot = ? AND status IN ('Pending', 'Approved')
-            """, (counselor_id, date, time_slot))
-            if cur.fetchone():
-                raise ValueError(f"Selected counselor already has a reserved session on {date} at {time_slot}. Please select another slot.")
-
-            apt_id = data.get('id') or f"apt-{uuid.uuid4().hex[:8]}"
-            date_clean = date.replace('-', '')
-            ref = data.get('reference_code') or f"BCC-APT-{date_clean}-{uuid.uuid4().hex[:4].upper()}"
-
-            cur.execute("""
-                INSERT INTO appointments (
-                    id, reference_code, student_id, counselor_id, service_id,
-                    date, time_slot, modality, urgency, reason, status, location_or_link
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                apt_id, ref, data['student_id'], counselor_id, data['service_id'],
-                date, time_slot, modality, urgency, data['reason'], 'Pending',
-                location
-            ))
-
-            # Record history
-            cur.execute("""
-                INSERT INTO appointment_status_history (id, appointment_id, old_status, new_status, changed_by_user_id, comments)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (f"hist-{uuid.uuid4().hex[:8]}", apt_id, None, 'Pending', data['student_id'], 'Appointment submitted by student'))
-
-            # Create notification for counselor
-            cur.execute("""
-                INSERT INTO notifications (id, recipient_id, title, message, type, link)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                f"notif-{uuid.uuid4().hex[:8]}",
-                counselor_id,
-                'New Appointment Request',
-                f"New request submitted for {date} at {time_slot} (Ref: {ref})",
-                'appointment',
-                'counselor/appointments.html'
-            ))
-
-            conn.commit()
-            new_apt = cls.get_appointment_by_id(apt_id)
-            return new_apt
-        finally:
-            conn.close()
+            with cls._tx() as cur:
+                cur.execute("SELECT 1 FROM appointments WHERE counselor_id = ? AND date = ? AND time_slot = ? AND status IN ('Pending', 'Approved')",
+                            (data['counselor_id'], data['date'], data['time_slot']))
+                if cur.fetchone():
+                    raise ValueError(conflict_msg)
+                cur.execute(f"INSERT INTO appointments ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})", tuple(row.values()))
+                cur.execute(f"INSERT INTO appointment_status_history ({', '.join(history)}) VALUES ({', '.join('?' * len(history))})",
+                            tuple(history.values()))
+        except sqlite3.IntegrityError:
+            # The partial unique index caught a booking that raced this one
+            raise ValueError(conflict_msg)
+        return cls.get_appointment_by_id(apt_id)
 
     @classmethod
     def update_appointment_status(cls, apt_id: str, new_status: str, changed_by_id: str, comments: str = '') -> dict:
+        apt = cls.get_appointment_by_id(apt_id)
+        if not apt:
+            raise LookupError('Appointment not found.')
+        real_id = apt['id']
+        history = {
+            'id': cls.new_id('hist'), 'appointment_id': real_id, 'old_status': apt['status'], 'new_status': new_status,
+            'changed_by_user_id': changed_by_id, 'comments': comments or None
+        }
+        reason = comments if new_status == 'Cancelled' else None
+
         if cls._use_supabase:
-            apt_res = cls._supabase_client.table('appointments').select('*').or_(f"id.eq.{apt_id},reference_code.eq.{apt_id}").execute()
-            if not apt_res.data:
-                raise ValueError("Appointment not found")
-            apt = apt_res.data[0]
-            real_id = apt['id']
-            old_status = apt['status']
-
-            update_data = {
-                'status': new_status,
-                'updated_at': datetime.datetime.now().isoformat()
-            }
-            if new_status == 'Cancelled':
-                update_data['cancellation_reason'] = comments
-
-            cls._supabase_client.table('appointments').update(update_data).eq('id', real_id).execute()
-
-            try:
-                cls._supabase_client.table('appointment_status_history').insert({
-                    'id': f"hist-{uuid.uuid4().hex[:8]}",
-                    'appointment_id': real_id,
-                    'old_status': old_status,
-                    'new_status': new_status,
-                    'changed_by_user_id': changed_by_id,
-                    'comments': comments
-                }).execute()
-            except Exception as e:
-                print(f"[Supabase] Status history notice: {e}")
-
-            try:
-                cls._supabase_client.table('notifications').insert({
-                    'id': f"notif-{uuid.uuid4().hex[:8]}",
-                    'recipient_id': apt['student_id'],
-                    'title': f"Appointment {new_status}",
-                    'message': f"Your appointment ({apt.get('reference_code', '')}) has been marked as {new_status}." + (f" Note: {comments}" if comments else ""),
-                    'type': 'appointment',
-                    'link': 'student/appointments.html'
-                }).execute()
-            except Exception as e:
-                print(f"[Supabase] Notification notice: {e}")
-
-            return cls.get_appointment_by_id(real_id)
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM appointments WHERE id = ? OR reference_code = ?", (apt_id, apt_id))
-        row = cur.fetchone()
-        if not row:
-            conn.close()
-            raise ValueError("Appointment not found")
-        real_id = row['id']
-        old_status = row['status']
-
-        cur.execute("""
-            UPDATE appointments SET status = ?, cancellation_reason = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        """, (new_status, comments if new_status == 'Cancelled' else None, real_id))
-
-        cur.execute("""
-            INSERT INTO appointment_status_history (id, appointment_id, old_status, new_status, changed_by_user_id, comments)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (f"hist-{uuid.uuid4().hex[:8]}", real_id, old_status, new_status, changed_by_id, comments))
-
-        cur.execute("""
-            INSERT INTO notifications (id, recipient_id, title, message, type, link)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            f"notif-{uuid.uuid4().hex[:8]}",
-            row['student_id'],
-            f"Appointment {new_status}",
-            f"Your appointment ({row['reference_code']}) has been marked as {new_status}." + (f" Note: {comments}" if comments else ""),
-            'appointment',
-            'student/appointments.html'
-        ))
-
-        conn.commit()
-        conn.close()
+            cls._sb().table('appointments').update({'status': new_status, 'cancellation_reason': reason, 'updated_at': cls._now()}).eq('id', real_id).execute()
+            cls._sb().table('appointment_status_history').insert(history).execute()
+        else:
+            with cls._tx() as cur:
+                cur.execute("UPDATE appointments SET status = ?, cancellation_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                            (new_status, reason, real_id))
+                cur.execute(f"INSERT INTO appointment_status_history ({', '.join(history)}) VALUES ({', '.join('?' * len(history))})",
+                            tuple(history.values()))
         return cls.get_appointment_by_id(real_id)
 
-    # ── Feedback ──
+    @classmethod
+    def reschedule_appointment(cls, apt_id: str, new_date: str, new_slot: str, changed_by_id: str, reason: str) -> dict:
+        apt = cls.get_appointment_by_id(apt_id)
+        if not apt:
+            raise LookupError('Appointment not found.')
+        real_id = apt['id']
+        conflict_msg = f"This counselor is already booked on {new_date} at {new_slot}. Please pick another time."
+        if new_slot in cls.booked_slots(apt['counselor_id'], new_date, exclude_id=real_id):
+            raise ValueError(conflict_msg)
+        history = {
+            'id': cls.new_id('hist'), 'appointment_id': real_id, 'old_status': apt['status'], 'new_status': 'Approved',
+            'changed_by_user_id': changed_by_id,
+            'comments': f"Rescheduled from {apt['date']} {apt['time_slot']} to {new_date} {new_slot}. {reason}".strip()
+        }
+        if cls._use_supabase:
+            try:
+                cls._sb().table('appointments').update({'date': new_date, 'time_slot': new_slot, 'status': 'Approved',
+                                                        'updated_at': cls._now()}).eq('id', real_id).execute()
+            except Exception as e:
+                if 'duplicate' in str(e).lower() or '23505' in str(e):
+                    raise ValueError(conflict_msg)
+                raise
+            cls._sb().table('appointment_status_history').insert(history).execute()
+        else:
+            try:
+                with cls._tx() as cur:
+                    cur.execute("UPDATE appointments SET date = ?, time_slot = ?, status = 'Approved', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                                (new_date, new_slot, real_id))
+                    cur.execute(f"INSERT INTO appointment_status_history ({', '.join(history)}) VALUES ({', '.join('?' * len(history))})",
+                                tuple(history.values()))
+            except sqlite3.IntegrityError:
+                raise ValueError(conflict_msg)
+        return cls.get_appointment_by_id(real_id)
+
+    # ══════════════════════════════════════════════════════════════════
+    # Feedback
+    # ══════════════════════════════════════════════════════════════════
 
     @classmethod
     def submit_feedback(cls, apt_id: str, student_id: str, rating: int, comments: str) -> dict:
+        fb = {'id': cls.new_id('fb'), 'appointment_id': apt_id, 'student_id': student_id, 'rating': rating, 'comments': comments}
+        duplicate = ValueError('Feedback for this appointment has already been submitted.')
         if cls._use_supabase:
-            existing = cls._supabase_client.table('appointment_feedback').select('id').eq('appointment_id', apt_id).execute()
-            if existing.data:
-                raise ValueError("Feedback for this appointment has already been submitted.")
-
-            fid = f"fb-{uuid.uuid4().hex[:8]}"
-            fb = {
-                'id': fid,
-                'appointment_id': apt_id,
-                'student_id': student_id,
-                'rating': rating,
-                'comments': comments
-            }
-            cls._supabase_client.table('appointment_feedback').insert(fb).execute()
+            if cls._sb().table('appointment_feedback').select('id').eq('appointment_id', apt_id).execute().data:
+                raise duplicate
+            cls._sb().table('appointment_feedback').insert(fb).execute()
             return fb
+        try:
+            with cls._tx() as cur:
+                cur.execute("SELECT 1 FROM appointment_feedback WHERE appointment_id = ?", (apt_id,))
+                if cur.fetchone():
+                    raise duplicate
+                cur.execute("INSERT INTO appointment_feedback (id, appointment_id, student_id, rating, comments) VALUES (?, ?, ?, ?, ?)",
+                            tuple(fb.values()))
+        except sqlite3.IntegrityError:
+            raise duplicate
+        return fb
 
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT id FROM appointment_feedback WHERE appointment_id = ?", (apt_id,))
-        if cur.fetchone():
-            conn.close()
-            raise ValueError("Feedback for this appointment has already been submitted.")
+    @classmethod
+    def get_all_feedback(cls) -> list:
+        if cls._use_supabase:
+            return cls._sb().table('appointment_feedback').select('appointment_id, student_id, rating, comments, created_at').execute().data or []
+        return cls._query("SELECT appointment_id, student_id, rating, comments, created_at FROM appointment_feedback")
 
-        fid = f"fb-{uuid.uuid4().hex[:8]}"
-        cur.execute("""
-            INSERT INTO appointment_feedback (id, appointment_id, student_id, rating, comments)
-            VALUES (?, ?, ?, ?, ?)
-        """, (fid, apt_id, student_id, rating, comments))
-        conn.commit()
-        conn.close()
-        return {'id': fid, 'appointment_id': apt_id, 'rating': rating, 'comments': comments}
-
-    # ── Clinical SOAP Notes ──
+    # ══════════════════════════════════════════════════════════════════
+    # Confidential SOAP notes
+    # ══════════════════════════════════════════════════════════════════
 
     @classmethod
     def get_counseling_records(cls, counselor_id: str = None, student_id: str = None) -> list:
         if cls._use_supabase:
-            records = []
-            try:
-                q = cls._supabase_client.table('counseling_session_records').select("""
-                    *,
-                    student:users!counseling_session_records_student_id_fkey(name, email)
-                """)
-                if counselor_id:
-                    q = q.eq('counselor_id', counselor_id)
-                if student_id:
-                    q = q.eq('student_id', student_id)
-                res = q.order('session_date', desc=True).execute()
-                records = res.data or []
-            except Exception as e:
-                print(f"[Supabase] Join note query fallback: {e}")
-                q = cls._supabase_client.table('counseling_session_records').select('*')
-                if counselor_id:
-                    q = q.eq('counselor_id', counselor_id)
-                if student_id:
-                    q = q.eq('student_id', student_id)
-                res = q.order('session_date', desc=True).execute()
-                records = res.data or []
-
-            user_cache = {}
-            out = []
-            for r in records:
-                s_name = 'Student'
-                s_email = ''
-                if r.get('student'):
-                    s_name = r['student'].get('name', 'Student')
-                    s_email = r['student'].get('email', '')
-                elif r.get('student_id'):
-                    sid = r['student_id']
-                    if sid not in user_cache:
-                        try:
-                            u_res = cls._supabase_client.table('users').select('name, email').eq('id', sid).execute()
-                            user_cache[sid] = u_res.data[0] if u_res.data else {}
-                        except Exception:
-                            user_cache[sid] = {}
-                    s_name = user_cache[sid].get('name', 'Student')
-                    s_email = user_cache[sid].get('email', '')
-
-                out.append({
-                    **r,
-                    'studentName': s_name,
-                    'studentEmail': s_email,
-                    'sessionDate': r.get('session_date'),
-                    'caseCategory': r.get('case_category')
-                })
-            return out
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        query = """
-            SELECT c.*, u.name as studentName, u.email as studentEmail
-            FROM counseling_session_records c
-            JOIN users u ON c.student_id = u.id
-            WHERE 1=1
-        """
-        params = []
-        if counselor_id:
-            query += " AND c.counselor_id = ?"
-            params.append(counselor_id)
-        if student_id:
-            query += " AND c.student_id = ?"
-            params.append(student_id)
-        query += " ORDER BY c.session_date DESC"
-        cur.execute(query, params)
-        rows = [dict(r) for r in cur.fetchall()]
+            q = cls._sb().table('counseling_session_records').select('*')
+            if counselor_id:
+                q = q.eq('counselor_id', counselor_id)
+            if student_id:
+                q = q.eq('student_id', student_id)
+            rows = q.order('session_date', desc=True).execute().data or []
+            ids = list({r['student_id'] for r in rows})
+            names = {u['id']: u for u in (cls._sb().table('users').select('id, name, email').in_('id', ids).execute().data or [])} if ids else {}
+            for r in rows:
+                r['studentName'] = names.get(r['student_id'], {}).get('name', 'Student')
+                r['studentEmail'] = names.get(r['student_id'], {}).get('email', '')
+        else:
+            query = """
+                SELECT c.*, u.name AS studentName, u.email AS studentEmail
+                FROM counseling_session_records c
+                JOIN users u ON c.student_id = u.id
+                WHERE 1=1
+            """
+            params = []
+            if counselor_id:
+                query += " AND c.counselor_id = ?"
+                params.append(counselor_id)
+            if student_id:
+                query += " AND c.student_id = ?"
+                params.append(student_id)
+            rows = cls._query(query + " ORDER BY c.session_date DESC, c.created_at DESC", params)
         for r in rows:
             r['sessionDate'] = r.get('session_date')
             r['caseCategory'] = r.get('case_category')
-        conn.close()
         return rows
 
     @classmethod
     def create_counseling_record(cls, data: dict) -> dict:
-        nid = f"note-{uuid.uuid4().hex[:8]}"
-        conf_level = data.get('confidentiality_level', 'Strictly Confidential')
-        status = data.get('status', 'Confidential')
-        session_date = data.get('session_date', datetime.date.today().isoformat())
-        duration = data.get('session_duration_minutes', 45)
-
-        if cls._use_supabase:
-            rec = {
-                'id': nid,
-                'appointment_id': data.get('appointment_id'),
-                'student_id': data['student_id'],
-                'counselor_id': data['counselor_id'],
-                'session_date': session_date,
-                'session_duration_minutes': duration,
-                'case_category': data['case_category'],
-                'subjective': data['subjective'],
-                'objective': data['objective'],
-                'assessment': data['assessment'],
-                'plan': data['plan'],
-                'confidentiality_level': conf_level,
-                'status': status
-            }
-            cls._supabase_client.table('counseling_session_records').insert(rec).execute()
-            return {
-                **data,
-                'id': nid,
-                'confidentiality_level': conf_level,
-                'status': status,
-                'session_date': session_date,
-                'session_duration_minutes': duration
-            }
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO counseling_session_records (
-                id, appointment_id, student_id, counselor_id, session_date,
-                session_duration_minutes, case_category, subjective, objective,
-                assessment, plan, confidentiality_level, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            nid,
-            data.get('appointment_id'),
-            data['student_id'],
-            data['counselor_id'],
-            session_date,
-            duration,
-            data['case_category'],
-            data['subjective'],
-            data['objective'],
-            data['assessment'],
-            data['plan'],
-            conf_level,
-            status
-        ))
-        conn.commit()
-        conn.close()
-        return {
-            **data,
-            'id': nid,
-            'confidentiality_level': conf_level,
-            'status': status,
-            'session_date': session_date,
-            'session_duration_minutes': duration
+        rec = {
+            'id': cls.new_id('note'),
+            'appointment_id': data.get('appointment_id') or None,
+            'student_id': data['student_id'],
+            'counselor_id': data['counselor_id'],
+            'session_date': data.get('session_date') or datetime.date.today().isoformat(),
+            'session_duration_minutes': int(data.get('session_duration_minutes') or 45),
+            'case_category': data['case_category'],
+            'subjective': data['subjective'],
+            'objective': data['objective'],
+            'assessment': data['assessment'],
+            'plan': data['plan'],
+            'confidentiality_level': 'Strictly Confidential',
+            'status': 'Confidential'
         }
+        if cls._use_supabase:
+            cls._sb().table('counseling_session_records').insert(rec).execute()
+        else:
+            with cls._tx() as cur:
+                cur.execute(f"INSERT INTO counseling_session_records ({', '.join(rec)}) VALUES ({', '.join('?' * len(rec))})", tuple(rec.values()))
+        return rec
 
-    # ── Guidance Resources ──
+    # ══════════════════════════════════════════════════════════════════
+    # Follow-up tasks
+    # ══════════════════════════════════════════════════════════════════
+
+    @classmethod
+    def get_followups(cls, counselor_id: str) -> list:
+        if cls._use_supabase:
+            rows = cls._sb().table('follow_up_tasks').select('*').eq('counselor_id', counselor_id).order('due_date').execute().data or []
+            ids = list({r['student_id'] for r in rows})
+            names = {u['id']: u['name'] for u in (cls._sb().table('users').select('id, name').in_('id', ids).execute().data or [])} if ids else {}
+            for r in rows:
+                r['studentName'] = names.get(r['student_id'], 'Student')
+            return rows
+        return cls._query("""
+            SELECT f.*, u.name AS studentName FROM follow_up_tasks f
+            JOIN users u ON f.student_id = u.id
+            WHERE f.counselor_id = ? ORDER BY f.status = 'Completed', f.due_date
+        """, (counselor_id,))
+
+    @classmethod
+    def get_followup(cls, task_id: str) -> dict:
+        if cls._use_supabase:
+            res = cls._sb().table('follow_up_tasks').select('*').eq('id', task_id).execute()
+            return res.data[0] if res.data else None
+        return cls._query_one("SELECT * FROM follow_up_tasks WHERE id = ?", (task_id,))
+
+    @classmethod
+    def create_followup(cls, data: dict) -> dict:
+        task = {
+            'id': cls.new_id('fu'),
+            'counselor_id': data['counselor_id'],
+            'student_id': data['student_id'],
+            'title': data['title'],
+            'description': data.get('description', ''),
+            'due_date': data['due_date'],
+            'status': 'Pending'
+        }
+        if cls._use_supabase:
+            cls._sb().table('follow_up_tasks').insert(task).execute()
+        else:
+            with cls._tx() as cur:
+                cur.execute(f"INSERT INTO follow_up_tasks ({', '.join(task)}) VALUES ({', '.join('?' * len(task))})", tuple(task.values()))
+        return task
+
+    @classmethod
+    def update_followup_status(cls, task_id: str, status: str) -> dict:
+        if cls._use_supabase:
+            cls._sb().table('follow_up_tasks').update({'status': status}).eq('id', task_id).execute()
+        else:
+            with cls._tx() as cur:
+                cur.execute("UPDATE follow_up_tasks SET status = ? WHERE id = ?", (status, task_id))
+        return cls.get_followup(task_id)
+
+    # ══════════════════════════════════════════════════════════════════
+    # Guidance resources
+    # ══════════════════════════════════════════════════════════════════
 
     @classmethod
     def get_resources(cls, category: str = None) -> list:
         if cls._use_supabase:
-            q = cls._supabase_client.table('guidance_resources').select('*')
+            q = cls._sb().table('guidance_resources').select('*')
             if category and category != 'All':
                 q = q.eq('category', category)
-            res = q.order('created_at', desc=True).execute()
-            return res.data or []
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
+            return q.order('created_at', desc=True).execute().data or []
         if category and category != 'All':
-            cur.execute("SELECT * FROM guidance_resources WHERE category = ? ORDER BY created_at DESC", (category,))
-        else:
-            cur.execute("SELECT * FROM guidance_resources ORDER BY created_at DESC")
-        rows = [dict(r) for r in cur.fetchall()]
-        conn.close()
-        return rows
+            return cls._query("SELECT * FROM guidance_resources WHERE category = ? ORDER BY created_at DESC, id", (category,))
+        return cls._query("SELECT * FROM guidance_resources ORDER BY created_at DESC, id")
 
-    # ── Announcements & Notifications ──
+    # ══════════════════════════════════════════════════════════════════
+    # Announcements
+    # ══════════════════════════════════════════════════════════════════
 
     @classmethod
-    def get_announcements(cls) -> list:
+    def get_announcements(cls, audiences: list = None) -> list:
+        """audiences=None returns everything (admin); otherwise only those target audiences."""
         if cls._use_supabase:
-            res_data = []
-            try:
-                res = cls._supabase_client.table('announcements').select("""
-                    *,
-                    author:users!announcements_author_id_fkey(name)
-                """).order('is_pinned', desc=True).order('created_at', desc=True).execute()
-                res_data = res.data or []
-            except Exception as e:
-                print(f"[Supabase] announcements join fallback: {e}")
-                res = cls._supabase_client.table('announcements').select('*').order('is_pinned', desc=True).order('created_at', desc=True).execute()
-                res_data = res.data or []
-
-            out = []
-            for a in res_data:
-                author_name = a.get('author', {}).get('name', 'BCC Guidance Office') if a.get('author') else 'BCC Guidance Office'
-                out.append({
-                    **a,
-                    'authorName': author_name,
-                    'author': author_name,
-                    'targetAudience': a.get('target_audience', 'All')
-                })
-            return out
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT a.*, u.name as authorName FROM announcements a JOIN users u ON a.author_id = u.id ORDER BY a.is_pinned DESC, a.created_at DESC")
-        rows = [dict(r) for r in cur.fetchall()]
-        conn.close()
+            q = cls._sb().table('announcements').select('*')
+            if audiences:
+                q = q.in_('target_audience', audiences)
+            rows = q.order('is_pinned', desc=True).order('created_at', desc=True).execute().data or []
+            ids = list({r['author_id'] for r in rows if r.get('author_id')})
+            names = {u['id']: u['name'] for u in (cls._sb().table('users').select('id, name').in_('id', ids).execute().data or [])} if ids else {}
+            for r in rows:
+                r['authorName'] = names.get(r.get('author_id'), 'BCC Guidance Office')
+        else:
+            query = "SELECT a.*, COALESCE(u.name, 'BCC Guidance Office') AS authorName FROM announcements a LEFT JOIN users u ON a.author_id = u.id"
+            params = []
+            if audiences:
+                query += f" WHERE a.target_audience IN ({', '.join('?' * len(audiences))})"
+                params = list(audiences)
+            rows = cls._query(query + " ORDER BY a.is_pinned DESC, a.created_at DESC", params)
+        for r in rows:
+            r['is_pinned'] = bool(r.get('is_pinned'))
+            r['targetAudience'] = r.get('target_audience') or 'All'
         return rows
+
+    @classmethod
+    def get_announcement(cls, ann_id: str) -> dict:
+        if cls._use_supabase:
+            res = cls._sb().table('announcements').select('*').eq('id', ann_id).execute()
+            return res.data[0] if res.data else None
+        return cls._query_one("SELECT * FROM announcements WHERE id = ?", (ann_id,))
 
     @classmethod
     def save_announcement(cls, data: dict) -> dict:
-        aid = data.get('id') or f"ann-{uuid.uuid4().hex[:8]}"
-        is_pinned = 1 if data.get('is_pinned', False) else 0
-
+        """Creates an announcement, or updates it when data['id'] names an existing one."""
+        record = {
+            'id': data.get('id') or cls.new_id('ann'),
+            'author_id': data['author_id'],
+            'title': data['title'],
+            'content': data['content'],
+            'category': data.get('category') or 'General Notice',
+            'target_audience': data.get('target_audience') or 'All',
+            'is_pinned': bool(data.get('is_pinned'))
+        }
         if cls._use_supabase:
-            ann_data = {
-                'id': aid,
-                'title': data['title'],
-                'content': data['content'],
-                'category': data.get('category', 'General Notice'),
-                'target_audience': data.get('target_audience') or data.get('targetAudience') or 'All',
-                'author_id': data.get('author_id', 'usr-adm-1'),
-                'is_pinned': bool(is_pinned)
-            }
-            cls._supabase_client.table('announcements').upsert(ann_data).execute()
-            return {'id': aid, **data}
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO announcements (id, title, content, category, author_id, is_pinned, is_published)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            aid,
-            data['title'],
-            data['content'],
-            data.get('category', 'General Notice'),
-            data.get('author_id', 'usr-adm-1'),
-            is_pinned,
-            is_published
-        ))
-        conn.commit()
-        conn.close()
-        return {'id': aid, **data}
+            cls._sb().table('announcements').upsert(record).execute()
+        else:
+            record['is_pinned'] = 1 if record['is_pinned'] else 0
+            updates = ', '.join(f"{k} = excluded.{k}" for k in record if k not in ('id', 'author_id'))
+            with cls._tx() as cur:
+                cur.execute(f"INSERT INTO announcements ({', '.join(record)}) VALUES ({', '.join('?' * len(record))}) "
+                            f"ON CONFLICT(id) DO UPDATE SET {updates}", tuple(record.values()))
+        return cls.get_announcement(record['id'])
 
     @classmethod
-    def get_notifications(cls, user_id: str) -> list:
+    def delete_announcement(cls, ann_id: str):
         if cls._use_supabase:
-            res = cls._supabase_client.table('notifications').select('*').eq('recipient_id', user_id).order('created_at', desc=True).limit(20).execute()
-            return res.data or []
+            cls._sb().table('announcements').delete().eq('id', ann_id).execute()
+            return
+        with cls._tx() as cur:
+            cur.execute("DELETE FROM announcements WHERE id = ?", (ann_id,))
 
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM notifications WHERE recipient_id = ? ORDER BY created_at DESC LIMIT 20", (user_id,))
-        rows = [dict(r) for r in cur.fetchall()]
-        conn.close()
+    # ══════════════════════════════════════════════════════════════════
+    # Notifications
+    # ══════════════════════════════════════════════════════════════════
+
+    @classmethod
+    def create_notification(cls, recipient_id: str, title: str, message: str, ntype: str = 'info', link: str = None):
+        row = {'id': cls.new_id('notif'), 'recipient_id': recipient_id, 'title': title, 'message': message, 'type': ntype, 'link': link}
+        try:
+            if cls._use_supabase:
+                cls._sb().table('notifications').insert(row).execute()
+            else:
+                with cls._tx() as cur:
+                    cur.execute("INSERT INTO notifications (id, recipient_id, title, message, type, link) VALUES (?, ?, ?, ?, ?, ?)",
+                                tuple(row.values()))
+        except Exception as e:
+            # A failed notification must never undo the action that triggered it
+            print(f"[DB] notification not saved: {e}")
+
+    @classmethod
+    def get_notifications(cls, user_id: str, limit: int = 30) -> list:
+        if cls._use_supabase:
+            rows = cls._sb().table('notifications').select('*').eq('recipient_id', user_id).order('created_at', desc=True).limit(limit).execute().data or []
+        else:
+            rows = cls._query("SELECT * FROM notifications WHERE recipient_id = ? ORDER BY created_at DESC LIMIT ?", (user_id, limit))
+        for r in rows:
+            r['is_read'] = bool(r.get('is_read'))
         return rows
 
     @classmethod
-    def mark_notification_read(cls, notif_id: str):
+    def mark_notification_read(cls, notif_id: str, user_id: str):
         if cls._use_supabase:
-            cls._supabase_client.table('notifications').update({'is_read': 1}).eq('id', notif_id).execute()
+            cls._sb().table('notifications').update({'is_read': True}).eq('id', notif_id).eq('recipient_id', user_id).execute()
             return
+        with cls._tx() as cur:
+            cur.execute("UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_id = ?", (notif_id, user_id))
 
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("UPDATE notifications SET is_read = 1 WHERE id = ?", (notif_id,))
-        conn.commit()
-        conn.close()
+    @classmethod
+    def mark_all_notifications_read(cls, user_id: str):
+        if cls._use_supabase:
+            cls._sb().table('notifications').update({'is_read': True}).eq('recipient_id', user_id).execute()
+            return
+        with cls._tx() as cur:
+            cur.execute("UPDATE notifications SET is_read = 1 WHERE recipient_id = ?", (user_id,))
 
-    # ── Audit Logs ──
+    # ══════════════════════════════════════════════════════════════════
+    # Audit logs
+    # ══════════════════════════════════════════════════════════════════
 
     @classmethod
     def add_audit_log(cls, user_id: str, user_name: str, action: str, details: str, ip: str = None):
-        log_id = f"log-{uuid.uuid4().hex[:8]}"
-        if cls._use_supabase:
-            try:
-                cls._supabase_client.table('audit_logs').insert({
-                    'id': log_id,
-                    'user_id': user_id,
-                    'user_name': user_name,
-                    'action': action,
-                    'details': details,
-                    'ip_address': ip
-                }).execute()
-            except Exception as e:
-                print(f"[Supabase] add_audit_log notice: {e}")
-            return
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO audit_logs (id, user_id, user_name, action, details, ip_address)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (log_id, user_id, user_name, action, details, ip))
-        conn.commit()
-        conn.close()
+        row = {'id': cls.new_id('log'), 'user_id': user_id, 'user_name': user_name or 'System',
+               'action': action, 'details': details, 'ip_address': ip}
+        try:
+            if cls._use_supabase:
+                cls._sb().table('audit_logs').insert(row).execute()
+            else:
+                with cls._tx() as cur:
+                    cur.execute("INSERT INTO audit_logs (id, user_id, user_name, action, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)",
+                                tuple(row.values()))
+        except Exception as e:
+            print(f"[DB] audit log not saved: {e}")
 
     @classmethod
-    def get_audit_logs(cls, limit: int = 50) -> list:
+    def get_audit_logs(cls, limit: int = 200) -> list:
         if cls._use_supabase:
-            res = cls._supabase_client.table('audit_logs').select('*').order('created_at', desc=True).limit(limit).execute()
-            out = []
-            for r in (res.data or []):
-                out.append({
-                    **r,
-                    'timestamp': r.get('created_at', ''),
-                    'userName': r.get('user_name', '')
-                })
-            return out
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ?", (limit,))
-        rows = []
-        for r in cur.fetchall():
-            d = dict(r)
-            d['timestamp'] = d.get('created_at', '')
-            d['userName'] = d.get('user_name', '')
-            rows.append(d)
-        conn.close()
+            rows = cls._sb().table('audit_logs').select('*').order('created_at', desc=True).limit(limit).execute().data or []
+        else:
+            rows = cls._query("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ?", (limit,))
+        for r in rows:
+            r['timestamp'] = r.get('created_at', '')
+            r['userName'] = r.get('user_name', '')
         return rows
 
-    # ── System Settings ──
+    # ══════════════════════════════════════════════════════════════════
+    # System settings
+    # ══════════════════════════════════════════════════════════════════
+
+    SETTING_DEFAULTS = {
+        'system_name': ('SYSTEM_NAME', 'Buenavista Community College Guidance System'),
+        'lead_time_hours': ('MIN_BOOKING_LEAD_HOURS', '12'),
+        'cancellation_window_hours': ('CANCELLATION_CUTOFF_HOURS', '4'),
+        'operating_hours': (None, '8:00 AM – 5:00 PM (Mon–Fri)'),
+        'max_advance_booking_days': ('MAX_ADVANCE_BOOKING_DAYS', '14'),
+        'max_active_appointments_per_student': ('MAX_ACTIVE_APPOINTMENTS_PER_STUDENT', '2'),
+    }
 
     @classmethod
     def get_settings(cls) -> dict:
         if cls._use_supabase:
-            res = cls._supabase_client.table('system_settings').select('setting_key, setting_value').execute()
-            raw = {r['setting_key']: r['setting_value'] for r in (res.data or [])}
-            settings = dict(raw)
-            settings['system_name'] = raw.get('system_name') or raw.get('SYSTEM_NAME') or 'Buenavista Community College Guidance System'
-            settings['lead_time_hours'] = raw.get('lead_time_hours') or raw.get('MIN_BOOKING_LEAD_HOURS') or '12'
-            settings['cancellation_window_hours'] = raw.get('cancellation_window_hours') or raw.get('CANCELLATION_CUTOFF_HOURS') or '4'
-            settings['operating_hours'] = raw.get('operating_hours') or '8:00 AM – 5:00 PM (Mon–Fri)'
-            settings['max_advance_booking_days'] = raw.get('max_advance_booking_days') or raw.get('MAX_ADVANCE_BOOKING_DAYS') or '14'
-            settings['max_active_appointments_per_student'] = raw.get('max_active_appointments_per_student') or raw.get('MAX_ACTIVE_APPOINTMENTS_PER_STUDENT') or '2'
-            return settings
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT setting_key, setting_value FROM system_settings")
-        raw = {r['setting_key']: r['setting_value'] for r in cur.fetchall()}
-        conn.close()
-
-        settings = dict(raw)
-        settings['system_name'] = raw.get('system_name') or raw.get('SYSTEM_NAME') or 'Buenavista Community College Guidance System'
-        settings['lead_time_hours'] = raw.get('lead_time_hours') or raw.get('MIN_BOOKING_LEAD_HOURS') or '12'
-        settings['cancellation_window_hours'] = raw.get('cancellation_window_hours') or raw.get('CANCELLATION_CUTOFF_HOURS') or '4'
-        settings['operating_hours'] = raw.get('operating_hours') or '8:00 AM – 5:00 PM (Mon–Fri)'
-        settings['max_advance_booking_days'] = raw.get('max_advance_booking_days') or raw.get('MAX_ADVANCE_BOOKING_DAYS') or '14'
-        settings['max_active_appointments_per_student'] = raw.get('max_active_appointments_per_student') or raw.get('MAX_ACTIVE_APPOINTMENTS_PER_STUDENT') or '2'
-        return settings
+            rows = cls._sb().table('system_settings').select('setting_key, setting_value').execute().data or []
+        else:
+            rows = cls._query("SELECT setting_key, setting_value FROM system_settings")
+        raw = {r['setting_key']: r['setting_value'] for r in rows}
+        # New keys win; the older upper-case seed keys are read as a fallback
+        return {key: raw.get(key) or (raw.get(legacy) if legacy else None) or default
+                for key, (legacy, default) in cls.SETTING_DEFAULTS.items()}
 
     @classmethod
     def save_system_settings(cls, settings_dict: dict) -> dict:
         if cls._use_supabase:
             for k, v in settings_dict.items():
-                cls._supabase_client.table('system_settings').upsert({
-                    'id': f"set-{uuid.uuid4().hex[:6]}",
-                    'setting_key': k,
-                    'setting_value': str(v)
-                }, on_conflict='setting_key').execute()
+                cls._sb().table('system_settings').upsert(
+                    {'id': cls.new_id('set'), 'setting_key': k, 'setting_value': str(v)}, on_conflict='setting_key').execute()
             return cls.get_settings()
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        for k, v in settings_dict.items():
-            cur.execute("""
-                INSERT INTO system_settings (id, setting_key, setting_value, updated_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = CURRENT_TIMESTAMP
-            """, (f"set-{uuid.uuid4().hex[:6]}", k, str(v)))
-        conn.commit()
-        conn.close()
+        with cls._tx() as cur:
+            for k, v in settings_dict.items():
+                cur.execute("""
+                    INSERT INTO system_settings (id, setting_key, setting_value, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = CURRENT_TIMESTAMP
+                """, (cls.new_id('set'), k, str(v)))
         return cls.get_settings()
-
-    # ── Profile & Password Management ──
-
-    @classmethod
-    def update_user_password(cls, user_id: str, new_password_hash: str):
-        if cls._use_supabase:
-            cls._supabase_client.table('users').update({
-                'password_hash': new_password_hash,
-                'updated_at': datetime.datetime.now().isoformat()
-            }).eq('id', user_id).execute()
-            return
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new_password_hash, user_id))
-        conn.commit()
-        conn.close()
-
-    @classmethod
-    def update_student_profile(cls, user_id: str, phone: str = None, emergency_contact: str = None) -> dict:
-        if cls._use_supabase:
-            if phone is not None:
-                cls._supabase_client.table('users').update({
-                    'phone': phone,
-                    'updated_at': datetime.datetime.now().isoformat()
-                }).eq('id', user_id).execute()
-            if emergency_contact is not None:
-                cls._supabase_client.table('student_profiles').update({
-                    'emergency_contact': emergency_contact
-                }).eq('user_id', user_id).execute()
-            return cls.get_user_by_id(user_id)
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        if phone is not None:
-            cur.execute("UPDATE users SET phone = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (phone, user_id))
-        if emergency_contact is not None:
-            cur.execute("UPDATE student_profiles SET emergency_contact = ? WHERE user_id = ?", (emergency_contact, user_id))
-        conn.commit()
-        conn.close()
-        return cls.get_user_by_id(user_id)
-
-    @classmethod
-    def toggle_user_status(cls, user_id: str, new_status: str) -> dict:
-        if cls._use_supabase:
-            cls._supabase_client.table('users').update({
-                'status': new_status,
-                'updated_at': datetime.datetime.now().isoformat()
-            }).eq('id', user_id).execute()
-            return cls.get_user_by_id(user_id)
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new_status, user_id))
-        conn.commit()
-        conn.close()
-        return cls.get_user_by_id(user_id)
-
-    # ── Service Management ──
-
-    @classmethod
-    def save_guidance_service(cls, data: dict) -> dict:
-        sid = data.get('id') or f"srv-{uuid.uuid4().hex[:8]}"
-        code = data.get('code', f"SRV-{uuid.uuid4().hex[:4].upper()}")
-        is_active = bool(data.get('is_active', data.get('isActive', True)))
-
-        if cls._use_supabase:
-            srv_record = {
-                'id': sid,
-                'code': code,
-                'title': data['title'],
-                'description': data['description'],
-                'category': data.get('category', 'General Counseling'),
-                'duration_minutes': int(data.get('duration_minutes', data.get('durationMinutes', 45))),
-                'icon': data.get('icon', 'book-open'),
-                'confidentiality_level': data.get('confidentiality_level', 'Confidential'),
-                'is_active': is_active
-            }
-            cls._supabase_client.table('guidance_services').upsert(srv_record).execute()
-            return cls.get_service_by_id(sid)
-
-        conn = cls.get_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO guidance_services (id, code, title, description, category, duration_minutes, icon, confidentiality_level, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                code = excluded.code,
-                title = excluded.title,
-                description = excluded.description,
-                category = excluded.category,
-                duration_minutes = excluded.duration_minutes,
-                icon = excluded.icon,
-                confidentiality_level = excluded.confidentiality_level,
-                is_active = excluded.is_active
-        """, (
-            sid,
-            code,
-            data['title'],
-            data['description'],
-            data.get('category', 'General Counseling'),
-            int(data.get('duration_minutes', data.get('durationMinutes', 45))),
-            data.get('icon', 'book-open'),
-            data.get('confidentiality_level', 'Confidential'),
-            1 if is_active else 0
-        ))
-        conn.commit()
-        conn.close()
-        return cls.get_service_by_id(sid)
-

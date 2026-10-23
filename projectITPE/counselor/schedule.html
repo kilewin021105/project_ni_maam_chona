@@ -35,10 +35,10 @@
       </div>
 
       <div class="sidebar-user">
-        <div class="sidebar-avatar counselor">M</div>
+        <div class="sidebar-avatar counselor"></div>
         <div class="sidebar-user-info">
-          <div class="sidebar-user-name">Maria Santos</div>
-          <div class="sidebar-user-role">GUIDANCE COUNSELOR</div>
+          <div class="sidebar-user-name"></div>
+          <div class="sidebar-user-role"></div>
         </div>
       </div>
 
@@ -94,30 +94,25 @@
         </div>
 
         <div class="topbar-right">
-          <div class="topbar-search">
-            <span id="icon-search"></span>
-            <input type="text" placeholder="Search schedule...">
-          </div>
 
           <div style="position: relative;">
             <button class="topbar-icon-btn" id="topbar-notif-btn" title="Notifications">
               <span id="icon-bell"></span>
-              <span class="notif-indicator"></span>
+              <span class="notif-indicator" style="display: none;"></span>
             </button>
             <div class="notif-dropdown" id="topbar-notif-popover">
               <div class="notif-head">
                 <span>Notifications</span>
-                <span class="badge badge-brand">New</span>
               </div>
               <div class="notif-list"></div>
             </div>
           </div>
 
           <div class="topbar-user">
-            <div class="topbar-avatar counselor">M</div>
+            <div class="topbar-avatar counselor"></div>
             <div class="topbar-user-info">
-              <div class="u-name">Maria Santos</div>
-              <div class="u-role">COUNSELOR</div>
+              <div class="u-name"></div>
+              <div class="u-role"></div>
             </div>
           </div>
         </div>
@@ -128,7 +123,7 @@
           
           <div style="margin-bottom: 1.5rem;">
             <h2 style="font-size: var(--text-2xl); font-weight: 800; color: var(--slate-900);">My Monthly Counseling Schedule</h2>
-            <p style="font-size: var(--text-sm); color: var(--slate-500); margin-top: 2px;">Consultation hours are scheduled between 8:00 AM to 5:00 PM, Monday through Friday.</p>
+            <p style="font-size: var(--text-sm); color: var(--slate-500); margin-top: 2px;">Click an appointment on the calendar to open it. Set the days you take appointments below.</p>
           </div>
 
           <div class="card" style="padding: 1.5rem;">
@@ -146,16 +141,19 @@
             </div>
           </div>
 
+        
+          <div class="card" id="cns-availability-card" style="margin-top: 1.5rem;"><p class="text-xs text-muted">Loading availability…</p></div>
         </div>
       </main>
     </div>
   </div>
 
   <script src="../js/icons.js"></script>
-  <script src="../js/data.js"></script>
+  <script src="../js/utils.js"></script>
   <script src="../js/storage.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/components/toast.js"></script>
+  <script src="../js/vendor/qrcode.min.js"></script>
   <script src="../js/components/modal.js"></script>
   <script src="../js/components/calendar.js"></script>
   <script src="../js/portal.js"></script>
@@ -175,7 +173,6 @@
       setIcon('nav-icon-rep', 'barChart');
       setIcon('icon-logout', 'logOut');
       setIcon('icon-menu', 'menu');
-      setIcon('icon-search', 'search');
       setIcon('icon-bell', 'bell');
 
       CounselorController.initSchedule();

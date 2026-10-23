@@ -36,10 +36,10 @@
       </div>
 
       <div class="sidebar-user">
-        <div class="sidebar-avatar student">J</div>
+        <div class="sidebar-avatar student"></div>
         <div class="sidebar-user-info">
-          <div class="sidebar-user-name">Juan Dela Cruz</div>
-          <div class="sidebar-user-role">STUDENT • BSIT 3A</div>
+          <div class="sidebar-user-name"></div>
+          <div class="sidebar-user-role"></div>
         </div>
       </div>
 
@@ -100,30 +100,25 @@
         </div>
 
         <div class="topbar-right">
-          <div class="topbar-search">
-            <span id="icon-search"></span>
-            <input type="text" placeholder="Search...">
-          </div>
 
           <div style="position: relative;">
             <button class="topbar-icon-btn" id="topbar-notif-btn" title="Notifications">
               <span id="icon-bell"></span>
-              <span class="notif-indicator"></span>
+              <span class="notif-indicator" style="display: none;"></span>
             </button>
             <div class="notif-dropdown" id="topbar-notif-popover">
               <div class="notif-head">
                 <span>Notifications</span>
-                <span class="badge badge-brand">New</span>
               </div>
               <div class="notif-list"></div>
             </div>
           </div>
 
           <div class="topbar-user">
-            <div class="topbar-avatar student">J</div>
+            <div class="topbar-avatar student"></div>
             <div class="topbar-user-info">
-              <div class="u-name">Juan Dela Cruz</div>
-              <div class="u-role">STUDENT</div>
+              <div class="u-name"></div>
+              <div class="u-role"></div>
             </div>
           </div>
         </div>
@@ -196,14 +191,14 @@
           <div id="step-container-3" style="display: none;">
             <div style="margin-bottom: 1.25rem;">
               <h3 style="font-size: var(--text-lg); font-weight: 800;">Step 3: Select Date & Available Time Slot</h3>
-              <p class="text-xs text-muted">Appointments must be booked at least 12 hours in advance.</p>
+              <p class="text-xs text-muted" id="book-date-rule">Loading booking rules…</p>
             </div>
             
             <div class="step-datetime-grid">
               <div class="calendar-box">
                 <div class="form-group">
-                  <label class="form-label required">Select Consultation Date</label>
-                  <input type="date" id="book-schedule-date" class="form-input" min="2026-08-01">
+                  <label class="form-label required" for="book-schedule-date">Select Consultation Date</label>
+                  <input type="date" id="book-schedule-date" class="form-input">
                   <p class="text-xs text-muted" style="margin-top: 0.35rem;">Office hours: Monday to Friday, 8:00 AM – 5:00 PM</p>
                 </div>
               </div>
@@ -211,6 +206,7 @@
               <div class="time-slots-box">
                 <div class="time-slots-title">Available Time Slots</div>
                 <div class="time-slots-grid" id="booking-slots-grid"></div>
+                <p class="text-xs" id="booking-slots-message" style="color: #b45309; margin-top: 0.5rem;">Choose a date to see the open time slots.</p>
               </div>
             </div>
 
@@ -228,9 +224,9 @@
             </div>
 
             <div class="card" style="margin-bottom: 1.5rem;">
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+              <div class="form-row-2">
                 <div class="form-group">
-                  <label class="form-label required">Consultation Modality</label>
+                  <label class="form-label required" for="book-modality">Consultation Modality</label>
                   <select id="book-modality" class="form-select">
                     <option value="In-Person">In-Person at BCC Guidance Office</option>
                     <option value="Online (Google Meet)">Online Video Consultation (Google Meet)</option>
@@ -239,17 +235,21 @@
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label required">Urgency Level</label>
+                  <label class="form-label required" for="book-urgency">Urgency Level</label>
                   <select id="book-urgency" class="form-select">
                     <option value="Routine" selected>Routine (Standard Schedule)</option>
-                    <option value="Urgent">Urgent (Immediate Priority)</option>
+                    <option value="Urgent">Urgent (as soon as possible)</option>
                   </select>
                 </div>
               </div>
 
               <div class="form-group">
-                <label class="form-label required">Reason for Consultation</label>
-                <textarea id="book-reason" class="form-textarea" style="min-height: 120px;" placeholder="Briefly describe what you would like to discuss with the guidance counselor..."></textarea>
+                <label class="form-label required" for="book-reason">Reason for Consultation</label>
+                <textarea id="book-reason" class="form-textarea" maxlength="1000" style="min-height: 120px;" placeholder="Briefly describe what you would like to discuss with the guidance counselor..."></textarea>
+                <p class="text-xs text-muted" style="margin-top: 0.25rem; text-align: right;" id="book-reason-count">0 / 1000</p>
+              </div>
+              <div class="alert alert-warning" id="book-crisis-note" hidden style="margin: 0;">
+                <strong>Need help right now?</strong> Booked appointments need counselor approval first. If you are in crisis or feel unsafe, go directly to the Guidance Office (Room 204) or tell any teacher or staff member immediately.
               </div>
             </div>
 
@@ -270,19 +270,27 @@
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; font-size: var(--text-sm);">
                 <div style="background: var(--bg-subtle); padding: 1.15rem; border-radius: var(--r-md); border: 1px solid var(--border-light);">
                   <span class="text-muted" style="display: block; font-size: 11px; text-transform: uppercase; font-weight: 700;">Student Name</span>
-                  <span class="font-bold" style="font-size: var(--text-base); color: var(--slate-900);" id="summary-student">Juan Dela Cruz</span>
+                  <span class="font-bold" style="font-size: var(--text-base); color: var(--slate-900);" id="summary-student">—</span>
                 </div>
                 <div style="background: var(--bg-subtle); padding: 1.15rem; border-radius: var(--r-md); border: 1px solid var(--border-light);">
                   <span class="text-muted" style="display: block; font-size: 11px; text-transform: uppercase; font-weight: 700;">Service</span>
-                  <span class="font-bold text-brand" style="font-size: var(--text-base);" id="summary-service">Academic Counseling</span>
+                  <span class="font-bold text-brand" style="font-size: var(--text-base);" id="summary-service">—</span>
                 </div>
                 <div style="background: var(--bg-subtle); padding: 1.15rem; border-radius: var(--r-md); border: 1px solid var(--border-light);">
                   <span class="text-muted" style="display: block; font-size: 11px; text-transform: uppercase; font-weight: 700;">Counselor</span>
-                  <span class="font-bold" style="font-size: var(--text-base); color: var(--slate-900);" id="summary-counselor">Maria Santos</span>
+                  <span class="font-bold" style="font-size: var(--text-base); color: var(--slate-900);" id="summary-counselor">—</span>
                 </div>
                 <div style="background: var(--bg-subtle); padding: 1.15rem; border-radius: var(--r-md); border: 1px solid var(--border-light);">
                   <span class="text-muted" style="display: block; font-size: 11px; text-transform: uppercase; font-weight: 700;">Schedule</span>
-                  <span class="font-bold text-brand" style="font-size: var(--text-base);" id="summary-schedule">Aug 20, 2026 at 1:00 PM</span>
+                  <span class="font-bold text-brand" style="font-size: var(--text-base);" id="summary-schedule">—</span>
+                </div>
+                <div style="background: var(--bg-subtle); padding: 1.15rem; border-radius: var(--r-md); border: 1px solid var(--border-light);">
+                  <span class="text-muted" style="display: block; font-size: 11px; text-transform: uppercase; font-weight: 700;">How</span>
+                  <span class="font-bold" style="font-size: var(--text-base); color: var(--slate-900);" id="summary-modality">—</span>
+                </div>
+                <div style="background: var(--bg-subtle); padding: 1.15rem; border-radius: var(--r-md); border: 1px solid var(--border-light); grid-column: 1 / -1;">
+                  <span class="text-muted" style="display: block; font-size: 11px; text-transform: uppercase; font-weight: 700;">Reason</span>
+                  <span style="font-size: var(--text-sm); color: var(--slate-700); white-space: pre-wrap; overflow-wrap: anywhere;" id="summary-reason">—</span>
                 </div>
               </div>
             </div>
@@ -290,7 +298,7 @@
             <div class="flex justify-between">
               <button class="btn btn-secondary" id="btn-step5-back">&larr; Back</button>
               <button class="btn btn-primary btn-lg" id="btn-submit-final-booking">
-                Confirm & Generate Pass Slip
+                Submit Appointment Request
               </button>
             </div>
           </div>
@@ -301,10 +309,11 @@
   </div>
 
   <script src="../js/icons.js"></script>
-  <script src="../js/data.js"></script>
+  <script src="../js/utils.js"></script>
   <script src="../js/storage.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/components/toast.js"></script>
+  <script src="../js/vendor/qrcode.min.js"></script>
   <script src="../js/components/modal.js"></script>
   <script src="../js/portal.js"></script>
   <script src="student.js"></script>
@@ -324,7 +333,6 @@
       setIcon('nav-icon-prof', 'user');
       setIcon('icon-logout', 'logOut');
       setIcon('icon-menu', 'menu');
-      setIcon('icon-search', 'search');
       setIcon('icon-bell', 'bell');
 
       StudentController.initBook();

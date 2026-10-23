@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Secrets — never commit these
+.env
+.jwt_secret
+
+# SQLite temporary files
+*.db-journal
+*.db-wal
+*.db-shm

@@ -36,10 +36,10 @@
       </div>
 
       <div class="sidebar-user">
-        <div class="sidebar-avatar counselor">M</div>
+        <div class="sidebar-avatar counselor"></div>
         <div class="sidebar-user-info">
-          <div class="sidebar-user-name">Maria Santos</div>
-          <div class="sidebar-user-role">GUIDANCE COUNSELOR</div>
+          <div class="sidebar-user-name"></div>
+          <div class="sidebar-user-role"></div>
         </div>
       </div>
 
@@ -96,30 +96,25 @@
         </div>
 
         <div class="topbar-right">
-          <div class="topbar-search">
-            <span id="icon-search"></span>
-            <input type="text" placeholder="Search queue...">
-          </div>
 
           <div style="position: relative;">
             <button class="topbar-icon-btn" id="topbar-notif-btn" title="Notifications">
               <span id="icon-bell"></span>
-              <span class="notif-indicator"></span>
+              <span class="notif-indicator" style="display: none;"></span>
             </button>
             <div class="notif-dropdown" id="topbar-notif-popover">
               <div class="notif-head">
                 <span>Notifications</span>
-                <span class="badge badge-brand">New</span>
               </div>
               <div class="notif-list"></div>
             </div>
           </div>
 
           <div class="topbar-user">
-            <div class="topbar-avatar counselor">M</div>
+            <div class="topbar-avatar counselor"></div>
             <div class="topbar-user-info">
-              <div class="u-name">Maria Santos</div>
-              <div class="u-role">COUNSELOR</div>
+              <div class="u-name"></div>
+              <div class="u-role"></div>
             </div>
           </div>
         </div>
@@ -130,7 +125,16 @@
           
           <div style="margin-bottom: 1.5rem;">
             <h2 style="font-size: var(--text-2xl); font-weight: 800; color: var(--slate-900);">Appointment Requests Queue</h2>
-            <p style="font-size: var(--text-sm); color: var(--slate-500); margin-top: 2px;">Review student requests, confirm schedules, or generate official appointment slips.</p>
+            <p style="font-size: var(--text-sm); color: var(--slate-500); margin-top: 2px;">Approve or reject requests, reschedule, and mark sessions completed. Only your own appointments are shown.</p>
+          </div>
+
+                    <div class="filter-bar" style="margin-bottom: 1.25rem;">
+            <button type="button" class="btn btn-sm btn-primary filter-tab-btn active" data-filter="active">Needs action</button>
+            <button type="button" class="btn btn-sm btn-secondary filter-tab-btn" data-filter="pending">Pending</button>
+            <button type="button" class="btn btn-sm btn-secondary filter-tab-btn" data-filter="approved">Approved</button>
+            <button type="button" class="btn btn-sm btn-secondary filter-tab-btn" data-filter="completed">Completed</button>
+            <button type="button" class="btn btn-sm btn-secondary filter-tab-btn" data-filter="cancelled">Cancelled</button>
+            <button type="button" class="btn btn-sm btn-secondary filter-tab-btn" data-filter="all">All</button>
           </div>
 
           <div class="table-wrap">
@@ -155,10 +159,11 @@
   </div>
 
   <script src="../js/icons.js"></script>
-  <script src="../js/data.js"></script>
+  <script src="../js/utils.js"></script>
   <script src="../js/storage.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/components/toast.js"></script>
+  <script src="../js/vendor/qrcode.min.js"></script>
   <script src="../js/components/modal.js"></script>
   <script src="../js/portal.js"></script>
   <script src="counselor.js"></script>
@@ -177,7 +182,6 @@
       setIcon('nav-icon-rep', 'barChart');
       setIcon('icon-logout', 'logOut');
       setIcon('icon-menu', 'menu');
-      setIcon('icon-search', 'search');
       setIcon('icon-bell', 'bell');
 
       CounselorController.initAppointments();

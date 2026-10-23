@@ -19,45 +19,32 @@ const Toast = {
 
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    
-    let iconName = 'info';
-    if (type === 'success') iconName = 'check-circle';
-    if (type === 'error') iconName = 'alert-circle';
-    if (type === 'warning') iconName = 'alert-triangle';
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
 
+    const iconName = { success: 'check-circle', error: 'alert-circle', warning: 'alert-triangle' }[type] || 'info';
     toast.innerHTML = `
       <div class="toast-icon">${Icons.get(iconName)}</div>
       <div class="toast-content">
-        <div class="toast-title">${title}</div>
-        ${message ? `<div class="toast-message">${message}</div>` : ''}
+        <div class="toast-title">${esc(title)}</div>
+        ${message ? `<div class="toast-message">${esc(message)}</div>` : ''}
       </div>
-      <button class="toast-close" aria-label="Close notification">${Icons.get('x')}</button>
+      <button type="button" class="toast-close" aria-label="Close notification">${Icons.get('x')}</button>
     `;
 
-    const closeBtn = toast.querySelector('.toast-close');
     const dismiss = () => {
       toast.classList.remove('show');
       setTimeout(() => toast.remove(), 300);
     };
-
-    closeBtn.addEventListener('click', dismiss);
+    toast.querySelector('.toast-close').addEventListener('click', dismiss);
 
     this.container.appendChild(toast);
-    
-    // Trigger animation
-    requestAnimationFrame(() => {
-      toast.classList.add('show');
-    });
-
-    if (duration > 0) {
-      setTimeout(dismiss, duration);
-    }
-
+    requestAnimationFrame(() => toast.classList.add('show'));
+    if (duration > 0) setTimeout(dismiss, duration);
     return toast;
   },
 
   success(title, message) { return this.show(title, message, 'success'); },
-  error(title, message) { return this.show(title, message, 'error', 5000); },
-  warning(title, message) { return this.show(title, message, 'warning'); },
+  error(title, message) { return this.show(title, message, 'error', 6000); },
+  warning(title, message) { return this.show(title, message, 'warning', 5000); },
   info(title, message) { return this.show(title, message, 'info'); }
 };

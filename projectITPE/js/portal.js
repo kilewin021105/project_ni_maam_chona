@@ -1,11 +1,11 @@
 /**
  * Buenavista Community College — Guidance Appointment System
- * Shared Portal Controller for Multi-Page HTML Architecture
+ * Shared portal shell: session check, role guard, user menu, notifications, logout
  */
 
 function getPortalContext() {
-  const full = (window.location.pathname + ' ' + window.location.href).replace(/\\/g, '/').toLowerCase();
-  const isSubdir = full.includes('/student/') || full.includes('/counselor/') || full.includes('/admin/');
+  const path = window.location.pathname.replace(/\\/g, '/').toLowerCase();
+  const isSubdir = /\/(student|counselor|admin)\//.test(path);
   return {
     isSubdir,
     prefix: isSubdir ? '../' : '',
@@ -13,308 +13,324 @@ function getPortalContext() {
   };
 }
 
+const ROLE_LABELS = { student: 'Student', counselor: 'Guidance Counselor', admin: 'Administrator' };
+
 const Portal = {
   currentUser: null,
+  notifications: [],
 
-  init(expectedRole = 'student') {
-    // 1. Ensure Storage is initialized
-    StorageService.init();
-
-    // 2. Resolve Current User & Enforce Auth
-    const user = StorageService.getCurrentUser();
+  /**
+   * Checks the session with the server and enforces the page's role.
+   * Returns the signed-in user, or null when the page should not continue.
+   */
+  async init(expectedRole) {
     const ctx = getPortalContext();
-
-    if (!user) {
-      // User is not authenticated -> Redirect directly to dedicated login page
-      window.location.href = ctx.loginUrl;
-      return;
+    const cached = Session.getUser();
+    if (!Session.getToken() || !cached) {
+      // Keep a more specific message (e.g. "account deactivated") if one is already waiting
+      try {
+        if (!sessionStorage.getItem('bcc_login_notice')) sessionStorage.setItem('bcc_login_notice', 'Please sign in to continue.');
+      } catch (e) {}
+      window.location.replace(ctx.loginUrl);
+      return null;
     }
 
-    if (expectedRole && user.role !== expectedRole) {
-      // Show professional institutional Role Access Barrier rather than jarring redirect loops
-      this.showRoleBoundaryModal(user, expectedRole, ctx);
-      return;
+    // Show the cached profile right away, then confirm it with the server
+    this.currentUser = cached;
+    if (cached.role === expectedRole) {
+      this.hydrateUserInfo();
+      this.attachShellEvents();
     }
 
-    this.currentUser = user;
+    let fresh;
+    try {
+      fresh = await ApiClient.getMe();
+    } catch (err) {
+      Toast.error('Connection problem', err.message);
+      return null;
+    }
 
-    // 3. Hydrate User Info across Sidebar and Topbar
+    if (fresh.role !== expectedRole) {
+      this.showRoleBoundary(fresh, expectedRole, ctx);
+      return null;
+    }
+
+    this.currentUser = fresh;
     this.hydrateUserInfo();
-
-    // 4. Attach Shell Events (Mobile Sidebar, Notifications, Logout)
-    this.attachShellEvents();
-
-    // 5. Render Notifications
-    this.renderNotifications();
+    if (cached.role !== expectedRole) this.attachShellEvents();
+    this.loadNotifications();
+    setInterval(() => this.loadNotifications(), 60000);
+    return fresh;
   },
 
-  showRoleBoundaryModal(currentUser, expectedRole, ctx) {
-    const roleLabels = {
-      student: 'Student',
-      counselor: 'Guidance Counselor',
-      admin: 'System Administrator'
-    };
-    const expectedLabel = roleLabels[expectedRole] || expectedRole;
-    const currentLabel = roleLabels[currentUser.role] || currentUser.role;
-
-    // Demo account mapping for seamless multi-role testing
-    const demoAccounts = {
-      student: 'juan.delacruz@buenavista.edu.ph',
-      counselor: 'msantos.guidance@buenavista.edu.ph',
-      admin: 'admin.guidance@buenavista.edu.ph'
-    };
-
-    const targetDemoEmail = demoAccounts[expectedRole];
-    const userHomeUrl = `${ctx.prefix}${currentUser.role}/dashboard.html`;
-
-    const barrierEl = document.createElement('div');
-    barrierEl.className = 'modal-backdrop open';
-    barrierEl.style.zIndex = '99999';
-    barrierEl.innerHTML = `
-      <div class="modal-dialog" style="max-width: 520px; text-align: center; padding: 2rem 1.5rem;">
-        <div style="width: 56px; height: 56px; border-radius: 50%; background: #fef2f2; color: #dc2626; display: flex; items-center; justify-content: center; margin: 0 auto 1.25rem; font-size: 26px;">
-          🔒
+  showRoleBoundary(user, expectedRole, ctx) {
+    const barrier = document.createElement('div');
+    barrier.className = 'modal-backdrop open';
+    barrier.style.zIndex = '99999';
+    barrier.innerHTML = `
+      <div class="modal-dialog" style="max-width: 480px; text-align: center; padding: 2rem 1.5rem;" role="alertdialog" aria-labelledby="barrier-title">
+        <div style="width: 56px; height: 56px; border-radius: 50%; background: #fef2f2; color: #dc2626; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem;">
+          ${Icons.get('shield')}
         </div>
-        <h3 style="font-size: 1.25rem; font-weight: 800; color: var(--slate-900); margin-bottom: 0.5rem;">
-          Restricted Portal Access
-        </h3>
+        <h3 id="barrier-title" style="font-size: 1.2rem; font-weight: 800; color: var(--slate-900); margin-bottom: 0.5rem;">You don't have access to this page</h3>
         <p style="font-size: var(--text-sm); color: var(--slate-600); line-height: 1.6; margin-bottom: 1.5rem;">
-          You are currently signed in as <strong>${currentUser.name}</strong> with the <strong>${currentLabel}</strong> role.<br>
-          This portal section requires authorized <strong>${expectedLabel}</strong> credentials.
+          You are signed in as <strong>${esc(user.name)}</strong> (${esc(ROLE_LABELS[user.role] || user.role)}).
+          This page is for ${esc(ROLE_LABELS[expectedRole] || expectedRole)} accounts only.
         </p>
-
         <div style="display: flex; flex-direction: column; gap: 0.65rem;">
-          ${targetDemoEmail ? `
-            <button type="button" class="btn btn-primary btn-lg w-full" id="btn-barrier-switch">
-              Switch to ${expectedLabel} Demo Account
-            </button>
-          ` : ''}
-          <button type="button" class="btn btn-secondary w-full" id="btn-barrier-logout">
-            Sign Out &amp; Return to Login
-          </button>
-          <button type="button" class="btn btn-outline w-full" id="btn-barrier-return">
-            &larr; Return to My ${currentLabel} Portal
-          </button>
+          <a class="btn btn-primary w-full" href="${Session.dashboardFor(user.role, ctx.prefix)}">Go to my dashboard</a>
+          <button type="button" class="btn btn-secondary w-full" id="btn-barrier-logout">Sign out</button>
         </div>
       </div>
     `;
-
-    document.body.appendChild(barrierEl);
+    document.body.appendChild(barrier);
     document.body.style.overflow = 'hidden';
-
-    // Event listeners
-    if (targetDemoEmail) {
-      barrierEl.querySelector('#btn-barrier-switch').addEventListener('click', () => {
-        const users = StorageService.getUsers();
-        const demoUser = users.find(u => u.email.toLowerCase() === targetDemoEmail.toLowerCase());
-        if (demoUser) {
-          StorageService.setCurrentUser(demoUser);
-          window.location.reload();
-        } else {
-          this.logout(false);
-        }
-      });
-    }
-
-    barrierEl.querySelector('#btn-barrier-logout').addEventListener('click', () => {
-      this.logout(false);
-    });
-
-    barrierEl.querySelector('#btn-barrier-return').addEventListener('click', () => {
-      window.location.href = userHomeUrl;
-    });
+    barrier.querySelector('#btn-barrier-logout').addEventListener('click', () => this.logout(false));
   },
 
   hydrateUserInfo() {
     const user = this.currentUser;
     if (!user) return;
+    const initial = user.avatarInitial || (user.name || '?').charAt(0);
+    const courseInfo = user.role === 'student' && user.course ? ` • ${user.course} ${user.yearSection || ''}`.trimEnd() : '';
 
-    // Sidebar User
-    const sbAvatar = document.querySelector('.sidebar-avatar');
-    if (sbAvatar) {
-      sbAvatar.textContent = user.avatarInitial || user.name.charAt(0);
-      sbAvatar.className = `sidebar-avatar ${user.role}`;
-    }
-
-    const sbName = document.querySelector('.sidebar-user-name');
-    if (sbName) sbName.textContent = user.name;
-
+    document.querySelectorAll('.sidebar-avatar, .topbar-avatar').forEach(el => {
+      el.textContent = initial;
+      el.className = `${el.classList.contains('sidebar-avatar') ? 'sidebar-avatar' : 'topbar-avatar'} ${user.role}`;
+    });
+    document.querySelectorAll('.sidebar-user-name, .topbar-user-info .u-name').forEach(el => { el.textContent = user.name; });
     const sbRole = document.querySelector('.sidebar-user-role');
-    if (sbRole) {
-      const courseInfo = user.course ? ` • ${user.course} ${user.yearSection || ''}` : '';
-      sbRole.textContent = `${user.role.toUpperCase()}${courseInfo}`;
-    }
-
-    // Topbar User
-    const tbAvatar = document.querySelector('.topbar-avatar');
-    if (tbAvatar) {
-      tbAvatar.textContent = user.avatarInitial || user.name.charAt(0);
-      tbAvatar.className = `topbar-avatar ${user.role}`;
-    }
-
-    const tbName = document.querySelector('.topbar-user-info .u-name');
-    if (tbName) tbName.textContent = user.name;
-
+    if (sbRole) sbRole.textContent = `${(ROLE_LABELS[user.role] || user.role).toUpperCase()}${courseInfo}`;
     const tbRole = document.querySelector('.topbar-user-info .u-role');
-    if (tbRole) tbRole.textContent = user.role.toUpperCase();
+    if (tbRole) tbRole.textContent = (ROLE_LABELS[user.role] || user.role).toUpperCase();
 
-    // Mount Topbar User Dropdown Menu
+    // The old topbar search box never did anything
+    document.querySelectorAll('.topbar-search').forEach(el => el.remove());
+
     const tbUser = document.querySelector('.topbar-user');
     if (tbUser && !tbUser.dataset.hasDropdown) {
       tbUser.dataset.hasDropdown = 'true';
-      tbUser.title = 'Click to open account menu';
+      tbUser.setAttribute('role', 'button');
+      tbUser.setAttribute('tabindex', '0');
+      tbUser.setAttribute('aria-haspopup', 'true');
+      tbUser.title = 'Account menu';
 
       const dropdown = document.createElement('div');
       dropdown.className = 'topbar-user-dropdown';
-      dropdown.id = 'topbar-user-dropdown';
       dropdown.innerHTML = `
         <div class="user-dd-header">
-          <div class="user-dd-name">${user.name}</div>
-          <div class="user-dd-role">${user.role.toUpperCase()} • BCC GUIDANCE</div>
+          <div class="user-dd-name"></div>
+          <div class="user-dd-role"></div>
         </div>
         <div class="user-dd-body">
-          <button type="button" class="user-dd-item btn-logout" data-action="logout" style="width: 100%; text-align: left; background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.65rem 1rem; color: #dc2626; font-size: 13px; font-weight: 600;">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-            <span>Sign Out / Log Out</span>
+          <button type="button" class="user-dd-item" data-action="password" style="width: 100%; text-align: left; background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.65rem 1rem; color: var(--slate-700); font-size: 13px; font-weight: 600;">
+            ${Icons.get('shield')} <span>Change password</span>
+          </button>
+          <button type="button" class="user-dd-item" data-action="logout" style="width: 100%; text-align: left; background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.65rem 1rem; color: #dc2626; font-size: 13px; font-weight: 600;">
+            ${Icons.get('logOut')} <span>Sign out</span>
           </button>
         </div>
       `;
       tbUser.appendChild(dropdown);
-
       tbUser.addEventListener('click', (e) => {
         if (e.target.closest('.user-dd-item')) return;
         dropdown.classList.toggle('open');
       });
-
+      tbUser.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dropdown.classList.toggle('open'); }
+        if (e.key === 'Escape') dropdown.classList.remove('open');
+      });
       document.addEventListener('click', (e) => {
-        if (!tbUser.contains(e.target)) {
-          dropdown.classList.remove('open');
-        }
+        if (!tbUser.contains(e.target)) dropdown.classList.remove('open');
       });
     }
+    const ddName = document.querySelector('.user-dd-name');
+    if (ddName) ddName.textContent = user.name;
+    const ddRole = document.querySelector('.user-dd-role');
+    if (ddRole) ddRole.textContent = `${(ROLE_LABELS[user.role] || user.role).toUpperCase()} • BCC GUIDANCE`;
   },
 
-  logout(confirmPrompt = true) {
-    const doLogout = () => {
-      try {
-        StorageService.clearCurrentUser();
-        localStorage.removeItem('bcc_current_user');
-        sessionStorage.clear();
-      } catch (e) {
-        console.error('Error clearing storage:', e);
-      }
-
-      if (typeof ApiClient !== 'undefined' && ApiClient.logout) {
-        ApiClient.logout().catch(() => {});
-      }
-
-      const ctx = getPortalContext();
-      window.location.href = ctx.loginUrl;
+  logout(confirmFirst = true) {
+    const doLogout = async () => {
+      await ApiClient.logout();
+      window.location.href = getPortalContext().loginUrl;
     };
-
-    if (!confirmPrompt) {
+    if (!confirmFirst) {
       doLogout();
       return;
     }
-
-    try {
-      if (typeof Modal !== 'undefined' && typeof Modal.confirm === 'function') {
-        Modal.confirm({
-          title: 'Sign Out Confirmation',
-          message: 'Are you sure you want to sign out from the BCC Guidance System?',
-          confirmText: 'Sign Out',
-          confirmType: 'btn-primary',
-          onConfirm: doLogout
-        });
-      } else {
-        if (confirm('Are you sure you want to sign out?')) {
-          doLogout();
-        }
-      }
-    } catch (e) {
-      doLogout();
-    }
+    Modal.confirm({
+      title: 'Sign out',
+      message: 'Are you sure you want to sign out of the BCC Guidance System?',
+      confirmText: 'Sign out',
+      onConfirm: doLogout
+    });
   },
 
   attachShellEvents() {
-    // Mobile Sidebar Toggle
+    if (this._shellAttached) return;
+    this._shellAttached = true;
+
     const mobileBtn = document.querySelector('.btn-mobile-menu');
     const sidebar = document.getElementById('app-sidebar');
     const overlay = document.getElementById('sidebar-overlay');
-
+    const closeSidebar = () => {
+      sidebar && sidebar.classList.remove('open');
+      overlay && overlay.classList.remove('open');
+    };
     if (mobileBtn && sidebar) {
       mobileBtn.addEventListener('click', () => {
         sidebar.classList.toggle('open');
-        if (overlay) overlay.classList.toggle('open');
+        overlay && overlay.classList.toggle('open');
       });
     }
+    overlay && overlay.addEventListener('click', closeSidebar);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebar(); });
 
-    if (overlay && sidebar) {
-      overlay.addEventListener('click', () => {
-        sidebar.classList.remove('open');
-        overlay.classList.remove('open');
-      });
-    }
-
-    // Notification Popover Toggle
-    const notifBtn = document.getElementById('topbar-notif-btn') || document.querySelector('.topbar-icon-btn');
-    const notifPop = document.getElementById('topbar-notif-popover') || document.querySelector('.notif-dropdown');
-
+    const notifBtn = document.getElementById('topbar-notif-btn');
+    const notifPop = document.getElementById('topbar-notif-popover');
     if (notifBtn && notifPop) {
+      notifBtn.setAttribute('aria-haspopup', 'true');
       notifBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         notifPop.classList.toggle('open');
       });
-
       document.addEventListener('click', (e) => {
-        if (!notifPop.contains(e.target) && !notifBtn.contains(e.target)) {
-          notifPop.classList.remove('open');
-        }
+        if (!notifPop.contains(e.target) && !notifBtn.contains(e.target)) notifPop.classList.remove('open');
       });
     }
 
-    // Attach Logout Click Listeners to All Triggers
-    document.querySelectorAll('.btn-sidebar-logout, .btn-logout, [data-action="logout"], #topbar-logout-btn').forEach(btn => {
+    document.querySelectorAll('.btn-sidebar-logout, [data-action="logout"]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         this.logout();
       });
     });
+    // The dropdown is created after this runs, so listen at the document level for its logout item
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.user-dd-item[data-action="logout"]')) {
+        e.preventDefault();
+        this.logout();
+      }
+      if (e.target.closest('.user-dd-item[data-action="password"]')) {
+        e.preventDefault();
+        document.querySelectorAll('.topbar-user-dropdown').forEach(d => d.classList.remove('open'));
+        PasswordDialog.open();
+      }
+    });
+  },
+
+  async loadNotifications() {
+    const listEl = document.querySelector('.notif-list');
+    if (!listEl) return;
+    try {
+      this.notifications = await ApiClient.getNotifications();
+    } catch (e) {
+      return;
+    }
+    this.renderNotifications();
   },
 
   renderNotifications() {
     const listEl = document.querySelector('.notif-list');
-    if (!listEl) return;
+    const indicator = document.querySelector('.notif-indicator');
+    const head = document.querySelector('.notif-head');
+    const unread = this.notifications.filter(n => !n.is_read);
 
-    const notifications = StorageService.getNotifications();
-    const user = this.currentUser;
-    const userNotifs = notifications.filter(n => !n.userId || n.userId === user.id);
-
-    if (userNotifs.length === 0) {
-      listEl.innerHTML = `
-        <div style="padding: 2rem 1rem; text-align: center; color: var(--slate-400); font-size: var(--text-xs);">
-          No notifications at this time.
-        </div>
+    if (indicator) indicator.style.display = unread.length ? '' : 'none';
+    if (head) {
+      head.innerHTML = `
+        <span>Notifications${unread.length ? ` (${unread.length})` : ''}</span>
+        ${unread.length ? '<button type="button" class="btn btn-sm btn-outline" id="notif-mark-all" style="padding: 2px 8px; font-size: 11px;">Mark all read</button>' : ''}
       `;
+      const markAll = head.querySelector('#notif-mark-all');
+      if (markAll) {
+        markAll.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await ApiClient.markAllNotificationsRead().catch(() => {});
+          this.notifications.forEach(n => { n.is_read = true; });
+          this.renderNotifications();
+        });
+      }
+    }
+
+    if (!this.notifications.length) {
+      listEl.innerHTML = '<div style="padding: 2rem 1rem; text-align: center; color: var(--slate-400); font-size: var(--text-xs);">No notifications yet.</div>';
       return;
     }
 
-    listEl.innerHTML = userNotifs.slice(0, 5).map(n => `
-      <div class="notif-row ${n.read ? '' : 'unread'}">
-        <div class="notif-icon-wrap" style="background: var(--bcc-subtle); color: var(--bcc-brand);">
-          ${Icons.get('bell')}
-        </div>
+    listEl.innerHTML = this.notifications.slice(0, 15).map(n => `
+      <div class="notif-row ${n.is_read ? '' : 'unread'}" data-id="${esc(n.id)}" data-link="${esc(n.link || '')}" role="button" tabindex="0">
+        <div class="notif-icon-wrap" style="background: var(--bcc-subtle); color: var(--bcc-brand);">${Icons.get('bell')}</div>
         <div class="notif-body">
-          <div class="n-title">${n.title}</div>
-          <div class="n-msg">${n.message}</div>
-          <div class="n-time">${n.timestamp || 'Just now'}</div>
+          <div class="n-title">${esc(n.title)}</div>
+          <div class="n-msg">${esc(n.message)}</div>
+          <div class="n-time">${esc(Utils.timeAgo(n.created_at))}</div>
         </div>
       </div>
     `).join('');
+
+    listEl.querySelectorAll('.notif-row').forEach(row => {
+      const open = async () => {
+        const n = this.notifications.find(x => x.id === row.dataset.id);
+        if (n && !n.is_read) {
+          n.is_read = true;
+          ApiClient.markNotificationRead(n.id).catch(() => {});
+        }
+        const link = row.dataset.link;
+        if (link && link.startsWith(`${this.currentUser.role}/`)) {
+          window.location.href = getPortalContext().prefix + link;
+        } else {
+          this.renderNotifications();
+        }
+      };
+      row.addEventListener('click', open);
+      row.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
+    });
+  }
+};
+
+/** Change-password dialog shared by all portals. */
+const PasswordDialog = {
+  open() {
+    const modal = Modal.open({
+      title: '🔒 Change password',
+      size: 'modal-md',
+      content: `
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <div class="form-group" style="margin: 0;">
+            <label class="form-label required" for="cp-current">Current password</label>
+            <input type="password" id="cp-current" class="form-input" autocomplete="current-password">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label class="form-label required" for="cp-new">New password</label>
+            <input type="password" id="cp-new" class="form-input" autocomplete="new-password" placeholder="At least 8 characters">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label class="form-label required" for="cp-confirm">Confirm new password</label>
+            <input type="password" id="cp-confirm" class="form-input" autocomplete="new-password">
+          </div>
+        </div>`,
+      footer: `
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-save-pass">Update password</button>`
+    });
+    const save = modal.querySelector('#btn-save-pass');
+    save.addEventListener('click', async () => {
+      const current = modal.querySelector('#cp-current').value;
+      const next = modal.querySelector('#cp-new').value;
+      const confirmPw = modal.querySelector('#cp-confirm').value;
+      if (!current || !next || !confirmPw) return Toast.warning('Missing information', 'Please fill in all three fields.');
+      if (next.length < 8) return Toast.warning('Password too short', 'Use at least 8 characters.');
+      if (next !== confirmPw) return Toast.warning('Passwords don’t match', 'Type the same new password twice.');
+      try {
+        await Utils.withBusy(save, 'Updating…', () => ApiClient.changePassword(current, next));
+        Modal.close();
+        Toast.success('Password changed', 'Use your new password next time you sign in.');
+      } catch (err) {
+        Toast.error('Password not changed', err.message);
+      }
+    });
   }
 };

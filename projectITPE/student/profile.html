@@ -36,10 +36,10 @@
       </div>
 
       <div class="sidebar-user">
-        <div class="sidebar-avatar student">J</div>
+        <div class="sidebar-avatar student"></div>
         <div class="sidebar-user-info">
-          <div class="sidebar-user-name">Juan Dela Cruz</div>
-          <div class="sidebar-user-role">STUDENT • BSIT 3A</div>
+          <div class="sidebar-user-name"></div>
+          <div class="sidebar-user-role"></div>
         </div>
       </div>
 
@@ -100,30 +100,25 @@
         </div>
 
         <div class="topbar-right">
-          <div class="topbar-search">
-            <span id="icon-search"></span>
-            <input type="text" placeholder="Search...">
-          </div>
 
           <div style="position: relative;">
             <button class="topbar-icon-btn" id="topbar-notif-btn" title="Notifications">
               <span id="icon-bell"></span>
-              <span class="notif-indicator"></span>
+              <span class="notif-indicator" style="display: none;"></span>
             </button>
             <div class="notif-dropdown" id="topbar-notif-popover">
               <div class="notif-head">
                 <span>Notifications</span>
-                <span class="badge badge-brand">New</span>
               </div>
               <div class="notif-list"></div>
             </div>
           </div>
 
           <div class="topbar-user">
-            <div class="topbar-avatar student">J</div>
+            <div class="topbar-avatar student"></div>
             <div class="topbar-user-info">
-              <div class="u-name">Juan Dela Cruz</div>
-              <div class="u-role">STUDENT</div>
+              <div class="u-name"></div>
+              <div class="u-role"></div>
             </div>
           </div>
         </div>
@@ -207,10 +202,11 @@
   </div>
 
   <script src="../js/icons.js"></script>
-  <script src="../js/data.js"></script>
+  <script src="../js/utils.js"></script>
   <script src="../js/storage.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/components/toast.js"></script>
+  <script src="../js/vendor/qrcode.min.js"></script>
   <script src="../js/components/modal.js"></script>
   <script src="../js/portal.js"></script>
   <script src="student.js"></script>
@@ -229,7 +225,6 @@
       setIcon('nav-icon-prof', 'user');
       setIcon('icon-logout', 'logOut');
       setIcon('icon-menu', 'menu');
-      setIcon('icon-search', 'search');
       setIcon('icon-bell', 'bell');
       setIcon('icon-card-user', 'user');
 

@@ -102,18 +102,18 @@
       <!-- Registration Form Body -->
       <div class="signup-body">
         
-        <form id="signup-form">
+        <form id="signup-form" novalidate>
           
           <!-- Name & Student ID -->
           <div class="form-grid-2">
             <div class="form-group">
               <label class="form-label required" for="su-name">Full Student Name</label>
-              <input type="text" id="su-name" class="form-input" placeholder="e.g. Juan P. Dela Cruz" required>
+              <input type="text" id="su-name" class="form-input" placeholder="e.g. Juan P. Dela Cruz" required maxlength="100" autocomplete="name">
             </div>
 
             <div class="form-group">
               <label class="form-label required" for="su-id">Student ID Number</label>
-              <input type="text" id="su-id" class="form-input" placeholder="e.g. BCC-2024-01048" required>
+              <input type="text" id="su-id" class="form-input" placeholder="e.g. BCC-2024-01048" required maxlength="30">
             </div>
           </div>
 
@@ -133,7 +133,7 @@
 
             <div class="form-group">
               <label class="form-label required" for="su-year">Year & Section</label>
-              <input type="text" id="su-year" class="form-input" placeholder="e.g. 3A" required>
+              <input type="text" id="su-year" class="form-input" placeholder="e.g. 3A" required maxlength="10">
             </div>
           </div>
 
@@ -141,19 +141,20 @@
           <div class="form-grid-2">
             <div class="form-group">
               <label class="form-label required" for="su-email">BCC Email Address</label>
-              <input type="email" id="su-email" class="form-input" placeholder="e.g. juan.delacruz@buenavista.edu.ph" required>
+              <input type="email" id="su-email" class="form-input" placeholder="e.g. juan.delacruz@buenavista.edu.ph" required autocomplete="email">
+              <p class="text-xs text-muted" style="margin-top: 0.25rem;">Use your @buenavista.edu.ph school email.</p>
             </div>
 
             <div class="form-group">
               <label class="form-label required" for="su-phone">Contact Number</label>
-              <input type="tel" id="su-phone" class="form-input" placeholder="e.g. 0917-555-0192" required>
+              <input type="tel" id="su-phone" class="form-input" placeholder="e.g. 0917-555-0192" required maxlength="30" autocomplete="tel">
             </div>
           </div>
 
           <!-- Emergency Contact -->
           <div class="form-group">
             <label class="form-label required" for="su-emergency">Emergency Contact (Parent / Guardian Name & Phone)</label>
-            <input type="text" id="su-emergency" class="form-input" placeholder="e.g. Maria Dela Cruz (Mother) - 0918-555-0199" required>
+            <input type="text" id="su-emergency" class="form-input" placeholder="e.g. Maria Dela Cruz (Mother) - 0918-555-0199" required maxlength="150">
           </div>
 
           <!-- Password & Confirm Password -->
@@ -161,7 +162,7 @@
             <div class="form-group">
               <label class="form-label required" for="su-password">Password</label>
               <div class="input-with-action">
-                <input type="password" id="su-password" class="form-input" placeholder="Minimum 6 characters" minlength="6" required>
+                <input type="password" id="su-password" class="form-input" placeholder="At least 8 characters" minlength="8" maxlength="128" required autocomplete="new-password">
                 <button type="button" class="btn-input-toggle" id="btn-toggle-su-pwd">Show</button>
               </div>
             </div>
@@ -169,7 +170,7 @@
             <div class="form-group">
               <label class="form-label required" for="su-confirm-password">Confirm Password</label>
               <div class="input-with-action">
-                <input type="password" id="su-confirm-password" class="form-input" placeholder="Re-enter password" minlength="6" required>
+                <input type="password" id="su-confirm-password" class="form-input" placeholder="Re-enter password" minlength="8" maxlength="128" required autocomplete="new-password">
                 <button type="button" class="btn-input-toggle" id="btn-toggle-su-cpwd">Show</button>
               </div>
             </div>
@@ -210,95 +211,59 @@
 
   <!-- Scripts in Proper Dependency Order -->
   <script src="js/icons.js"></script>
-  <script src="js/data.js"></script>
+  <script src="js/utils.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/api.js"></script>
   <script src="js/components/toast.js"></script>
   <script src="js/components/modal.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      StorageService.init();
-
       const form = document.getElementById('signup-form');
       const submitBtn = document.getElementById('btn-submit-signup');
 
-      // Password visibility toggles
-      const setupToggle = (btnId, inputId) => {
+      [['btn-toggle-su-pwd', 'su-password'], ['btn-toggle-su-cpwd', 'su-confirm-password']].forEach(([btnId, inputId]) => {
         const btn = document.getElementById(btnId);
         const input = document.getElementById(inputId);
-        if (btn && input) {
-          btn.addEventListener('click', () => {
-            if (input.type === 'password') {
-              input.type = 'text';
-              btn.textContent = 'Hide';
-            } else {
-              input.type = 'password';
-              btn.textContent = 'Show';
-            }
-          });
-        }
-      };
-
-      setupToggle('btn-toggle-su-pwd', 'su-password');
-      setupToggle('btn-toggle-su-cpwd', 'su-confirm-password');
+        btn.setAttribute('aria-label', 'Show password');
+        btn.addEventListener('click', () => {
+          const show = input.type === 'password';
+          input.type = show ? 'text' : 'password';
+          btn.textContent = show ? 'Hide' : 'Show';
+          btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        });
+      });
 
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-
-        const name = document.getElementById('su-name').value.trim();
-        const studentId = document.getElementById('su-id').value.trim();
-        const course = document.getElementById('su-course').value;
-        const yearSection = document.getElementById('su-year').value.trim();
-        const email = document.getElementById('su-email').value.trim();
-        const phone = document.getElementById('su-phone').value.trim();
-        const emergencyContact = document.getElementById('su-emergency').value.trim();
-        const password = document.getElementById('su-password').value;
+        const val = (id) => document.getElementById(id).value.trim();
+        const data = {
+          name: val('su-name'),
+          student_id_number: val('su-id'),
+          course: val('su-course'),
+          year_section: val('su-year'),
+          email: val('su-email').toLowerCase(),
+          phone: val('su-phone'),
+          emergency_contact: val('su-emergency'),
+          password: document.getElementById('su-password').value
+        };
         const confirmPassword = document.getElementById('su-confirm-password').value;
-        const privacyChecked = document.getElementById('su-privacy-check').checked;
 
-        if (!privacyChecked) {
-          Toast.warning('Privacy Agreement', 'Please accept the data privacy policy to continue.');
-          return;
-        }
-
-        if (password !== confirmPassword) {
-          Toast.error('Password Mismatch', 'The passwords you entered do not match. Please re-enter.');
-          return;
-        }
-
-        if (!name || !studentId || !email || !password) {
-          Toast.warning('Required Fields', 'Please complete all required fields.');
-          return;
-        }
+        const missing = [['name', 'full name'], ['student_id_number', 'student ID'], ['year_section', 'year & section'], ['email', 'email'],
+                         ['phone', 'contact number'], ['emergency_contact', 'emergency contact']].filter(([k]) => !data[k]).map(([, label]) => label);
+        if (missing.length) return Toast.warning('Missing information', `Please fill in: ${missing.join(', ')}.`);
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email)) return Toast.warning('Check your email', 'Please enter a valid email address.');
+        if (data.password.length < 8) return Toast.warning('Password too short', 'Use at least 8 characters.');
+        if (data.password !== confirmPassword) return Toast.warning('Passwords don’t match', 'Type the same password in both boxes.');
+        if (!document.getElementById('su-privacy-check').checked) return Toast.warning('Privacy agreement', 'Please accept the data privacy policy to continue.');
 
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Registering Account...';
-
+        submitBtn.textContent = 'Creating your account…';
         try {
-          const newUser = await ApiClient.registerStudent({
-            name,
-            studentId,
-            student_id_number: studentId,
-            course,
-            yearSection,
-            year_section: yearSection,
-            email,
-            phone,
-            emergencyContact,
-            emergency_contact: emergencyContact,
-            password
-          });
-
-          // Ensure session is set
-          StorageService.setCurrentUser(newUser);
-
-          Toast.success('Registration Successful', `Welcome to BCC Guidance System, ${newUser.name}!`);
-
-          setTimeout(() => {
-            window.location.href = 'student/dashboard.html';
-          }, 600);
+          const user = await ApiClient.registerStudent(data);
+          Toast.success('Account created', `Welcome, ${user.name}!`);
+          setTimeout(() => { window.location.href = 'student/dashboard.html'; }, 500);
         } catch (err) {
-          Toast.error('Registration Error', err.message || 'Unable to register account.');
+          Toast.error('Registration failed', err.message);
           submitBtn.disabled = false;
           submitBtn.textContent = 'Create Student Account →';
         }

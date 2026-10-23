@@ -29,7 +29,7 @@
     <!-- Public Navigation Header Bar -->
     <header class="pub-header">
       <div class="pub-header-inner">
-        <a href="#" class="pub-brand" onclick="window.scrollTo({top:0, behavior:'smooth'})">
+        <a href="#sec-hero" class="pub-brand">
           <img src="pictures/BCC_logo.png" alt="BCC Logo">
           <div class="pub-brand-text">
             <h1>BUENAVISTA COMMUNITY COLLEGE</h1>
@@ -37,12 +37,13 @@
           </div>
         </a>
 
+        <button type="button" class="pub-nav-toggle" id="pub-nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="pub-nav-menu"><span id="icon-pub-menu"></span></button>
         <nav>
-          <ul class="pub-nav-menu">
+          <ul class="pub-nav-menu" id="pub-nav-menu">
             <li class="pub-nav-item"><a href="#sec-hero">Home</a></li>
             <li class="pub-nav-item"><a href="#sec-services-block">Services</a></li>
             <li class="pub-nav-item"><a href="#sec-quick-access">Appointments</a></li>
-            <li class="pub-nav-item"><a href="#sec-announcements-block">About</a></li>
+            <li class="pub-nav-item"><a href="#sec-announcements-block">Announcements</a></li>
             <li class="pub-nav-item"><a href="#sec-footer">Contact</a></li>
           </ul>
         </nav>
@@ -133,42 +134,10 @@
       <div>
         <div class="flex items-center justify-between" style="margin-bottom: 1.25rem;">
           <h3 style="font-size: var(--text-xl); font-weight: 800;">Latest Announcements</h3>
-          <a href="admin/announcements.html" id="btn-view-all-announcements" style="font-size: var(--text-xs); font-weight: 700;">View All &rarr;</a>
         </div>
 
         <div id="landing-announcements-list">
-          <div class="announcement-list-item">
-            <div class="ann-date-chip">
-              <div class="day">28</div>
-              <div class="month">Aug</div>
-            </div>
-            <div>
-              <h4 style="font-size: var(--text-sm); font-weight: 700;">Guidance Office Advisory</h4>
-              <p style="font-size: var(--text-xs); color: var(--slate-500);">The Guidance Office will be closed on August 28, 2026 for staff development.</p>
-            </div>
-          </div>
-
-          <div class="announcement-list-item">
-            <div class="ann-date-chip">
-              <div class="day">20</div>
-              <div class="month">Aug</div>
-            </div>
-            <div>
-              <h4 style="font-size: var(--text-sm); font-weight: 700;">Career Orientation Seminar</h4>
-              <p style="font-size: var(--text-xs); color: var(--slate-500);">Join us for the upcoming Career Orientation Seminar on August 20, 2026 at BCC Auditorium.</p>
-            </div>
-          </div>
-
-          <div class="announcement-list-item">
-            <div class="ann-date-chip">
-              <div class="day">15</div>
-              <div class="month">Aug</div>
-            </div>
-            <div>
-              <h4 style="font-size: var(--text-sm); font-weight: 700;">Mental Health Awareness</h4>
-              <p style="font-size: var(--text-xs); color: var(--slate-500);">Let's support mental health. Free counseling is available for all BCC students.</p>
-            </div>
-          </div>
+          <p class="text-xs text-muted">Loading announcements…</p>
         </div>
       </div>
 
@@ -218,7 +187,7 @@
             <li><a href="#sec-hero">Home</a></li>
             <li><a href="#sec-services-block">Services</a></li>
             <li><a href="#sec-quick-access">Appointments</a></li>
-            <li><a href="#sec-announcements-block">About Us</a></li>
+            <li><a href="#sec-announcements-block">Announcements</a></li>
             <li><a href="#sec-footer">Contact</a></li>
           </ul>
         </div>
@@ -233,9 +202,8 @@
         <div>
           <div class="footer-col-title">Portal Access</div>
           <div class="flex flex-col gap-2" style="font-size: var(--text-xs);">
-            <a href="student/dashboard.html" style="color: var(--bcc-bright); font-weight: 700;">&rarr; Student Portal</a>
-            <a href="counselor/dashboard.html" style="color: var(--bcc-bright); font-weight: 700;">&rarr; Counselor Portal</a>
-            <a href="admin/dashboard.html" style="color: var(--bcc-bright); font-weight: 700;">&rarr; Administrator Portal</a>
+            <a href="login.html" style="color: var(--bcc-bright); font-weight: 700;">&rarr; Sign in (students, counselors, staff)</a>
+            <a href="signup.html" style="color: var(--bcc-bright); font-weight: 700;">&rarr; Register a student account</a>
           </div>
         </div>
       </div>
@@ -250,15 +218,13 @@
 
   <!-- Scripts in Proper Dependency Order -->
   <script src="js/icons.js"></script>
-  <script src="js/data.js"></script>
+  <script src="js/utils.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/api.js"></script>
   <script src="js/components/toast.js"></script>
   <script src="js/components/modal.js"></script>
-  <script src="js/views/auth.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      StorageService.init();
 
       // Render Icons
       const setIcon = (id, iconName) => {
@@ -274,35 +240,42 @@
       setIcon('icon-qa-status', 'check-circle');
       setIcon('icon-qa-srv', 'book-open');
       setIcon('icon-qa-users', 'users');
+      setIcon('icon-pub-menu', 'menu');
+
+      const navToggle = document.getElementById('pub-nav-toggle');
+      const navMenu = document.getElementById('pub-nav-menu');
+      navToggle.addEventListener('click', () => {
+        const open = navMenu.classList.toggle('open');
+        navToggle.setAttribute('aria-expanded', String(open));
+      });
+      navMenu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => { navMenu.classList.remove('open'); navToggle.setAttribute('aria-expanded', 'false'); }));
 
       // Dynamically load live campus bulletins
       async function loadLiveAnnouncements() {
         const container = document.getElementById('landing-announcements-list');
-        if (!container || typeof ApiClient === 'undefined') return;
+        if (!container) return;
         try {
           const list = await ApiClient.getAnnouncements();
-          if (list && list.length > 0) {
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            container.innerHTML = list.slice(0, 3).map(a => {
-              const d = a.created_at || a.createdAt || a.publishDate ? new Date(a.created_at || a.createdAt || a.publishDate) : new Date();
-              const day = d.getDate();
-              const month = months[d.getMonth()];
-              return `
-                <div class="announcement-list-item">
-                  <div class="ann-date-chip">
-                    <div class="day">${day}</div>
-                    <div class="month">${month}</div>
-                  </div>
-                  <div>
-                    <h4 style="font-size: var(--text-sm); font-weight: 700;">${a.title}</h4>
-                    <p style="font-size: var(--text-xs); color: var(--slate-500);">${a.content}</p>
-                  </div>
-                </div>
-              `;
-            }).join('');
+          if (!list.length) {
+            container.innerHTML = '<p class="text-xs text-muted">No announcements right now.</p>';
+            return;
           }
+          container.innerHTML = list.slice(0, 4).map(a => {
+            const d = Utils.parseDate(a.created_at) || new Date();
+            return `
+              <div class="announcement-list-item">
+                <div class="ann-date-chip">
+                  <div class="day">${d.getDate()}</div>
+                  <div class="month">${d.toLocaleDateString('en-US', { month: 'short' })}</div>
+                </div>
+                <div style="min-width: 0;">
+                  <h4 style="font-size: var(--text-sm); font-weight: 700;">${esc(a.title)}</h4>
+                  <p style="font-size: var(--text-xs); color: var(--slate-500); white-space: pre-line; overflow-wrap: anywhere;">${esc(a.content)}</p>
+                </div>
+              </div>`;
+          }).join('');
         } catch (e) {
-          console.warn('[Landing] Announcements load notice:', e);
+          console.warn('[Landing] Announcements could not be loaded:', e.message);
         }
       }
       loadLiveAnnouncements();

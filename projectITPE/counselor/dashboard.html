@@ -36,10 +36,10 @@
       </div>
 
       <div class="sidebar-user">
-        <div class="sidebar-avatar counselor">M</div>
+        <div class="sidebar-avatar counselor"></div>
         <div class="sidebar-user-info">
-          <div class="sidebar-user-name">Maria Santos</div>
-          <div class="sidebar-user-role">GUIDANCE COUNSELOR</div>
+          <div class="sidebar-user-name"></div>
+          <div class="sidebar-user-role"></div>
         </div>
       </div>
 
@@ -96,30 +96,25 @@
         </div>
 
         <div class="topbar-right">
-          <div class="topbar-search">
-            <span id="icon-search"></span>
-            <input type="text" placeholder="Search students, queues...">
-          </div>
 
           <div style="position: relative;">
             <button class="topbar-icon-btn" id="topbar-notif-btn" title="Notifications">
               <span id="icon-bell"></span>
-              <span class="notif-indicator"></span>
+              <span class="notif-indicator" style="display: none;"></span>
             </button>
             <div class="notif-dropdown" id="topbar-notif-popover">
               <div class="notif-head">
                 <span>Notifications</span>
-                <span class="badge badge-brand">New</span>
               </div>
               <div class="notif-list"></div>
             </div>
           </div>
 
           <div class="topbar-user">
-            <div class="topbar-avatar counselor">M</div>
+            <div class="topbar-avatar counselor"></div>
             <div class="topbar-user-info">
-              <div class="u-name">Maria Santos</div>
-              <div class="u-role">COUNSELOR</div>
+              <div class="u-name"></div>
+              <div class="u-role"></div>
             </div>
           </div>
         </div>
@@ -130,7 +125,7 @@
           
           <!-- Greeting Header -->
           <div style="margin-bottom: 1.5rem;">
-            <h2 style="font-size: 1.75rem; font-weight: 800; color: var(--slate-900);">Welcome, Guidance Counselor</h2>
+            <h2 id="cns-greeting" style="font-size: 1.75rem; font-weight: 800; color: var(--slate-900);">Welcome</h2>
             <p style="font-size: var(--text-sm); color: var(--slate-500); margin-top: 2px;">Review student consultations, appointments, and case notes.</p>
           </div>
 
@@ -170,7 +165,7 @@
           </div>
 
           <!-- Main Split Grid -->
-          <div style="display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 1.5rem;">
+          <div class="dash-split">
             
             <!-- Left: Today's Appointments Table & Quick Actions -->
             <div>
@@ -208,7 +203,7 @@
                   </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;">
+                <div class="quick-actions-row">
                   <a href="schedule.html" class="btn btn-secondary">
                     <span id="icon-qa-sched"></span> View My Schedule
                   </a>
@@ -231,14 +226,10 @@
                   </div>
                 </div>
 
-                <div style="text-align: center; font-weight: 800; margin-bottom: 0.75rem; color: var(--bcc-dark);">
-                  &lt; August 2026 &gt;
-                </div>
-
                 <div id="cns-calendar-widget"></div>
 
                 <div class="flex gap-3 justify-center" style="margin-top: 1rem; font-size: 11px; color: var(--slate-600);">
-                  <span class="flex items-center gap-1"><span class="badge-dot" style="background: var(--bcc-brand);"></span> Confirmed</span>
+                  <span class="flex items-center gap-1"><span class="badge-dot" style="background: var(--bcc-brand);"></span> Approved</span>
                   <span class="flex items-center gap-1"><span class="badge-dot" style="background: #ca8a04;"></span> Pending</span>
                   <span class="flex items-center gap-1"><span class="badge-dot" style="background: #3b82f6;"></span> Completed</span>
                 </div>
@@ -260,10 +251,11 @@
   </div>
 
   <script src="../js/icons.js"></script>
-  <script src="../js/data.js"></script>
+  <script src="../js/utils.js"></script>
   <script src="../js/storage.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/components/toast.js"></script>
+  <script src="../js/vendor/qrcode.min.js"></script>
   <script src="../js/components/modal.js"></script>
   <script src="../js/components/calendar.js"></script>
   <script src="../js/portal.js"></script>
@@ -283,7 +275,6 @@
       setIcon('nav-icon-rep', 'barChart');
       setIcon('icon-logout', 'logOut');
       setIcon('icon-menu', 'menu');
-      setIcon('icon-search', 'search');
       setIcon('icon-bell', 'bell');
       setIcon('icon-card-clock', 'clock');
       setIcon('icon-card-grid', 'grid');

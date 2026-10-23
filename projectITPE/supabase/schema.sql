@@ -210,16 +210,30 @@ CREATE TABLE IF NOT EXISTS system_settings (
 );
 
 -- ================================================================================
--- ROW LEVEL SECURITY (RLS) POLICIES
+-- ROW LEVEL SECURITY
 -- ================================================================================
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE counseling_session_records ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE appointment_feedback ENABLE ROW LEVEL SECURITY;
-
--- Note: When accessed via backend service role key, RLS is bypassed by the trusted Python API server.
--- Direct client access policies can be defined as follows:
-CREATE POLICY "Users can read own profile" ON users FOR SELECT USING (true);
-CREATE POLICY "Students see own appointments" ON appointments FOR SELECT USING (true);
-CREATE POLICY "Counselors manage counseling notes" ON counseling_session_records FOR ALL USING (true);
+-- RLS is ON for every table with no public policies. The Flask backend connects with the
+-- service-role key (which bypasses RLS); the public anon key gets no access at all.
+DO $$
+DECLARE
+    tbl text;
+    pol record;
+    tables text[] := ARRAY[
+        'users', 'student_profiles', 'counselor_profiles', 'guidance_services', 'counselor_availability',
+        'appointments', 'appointment_status_history', 'counseling_session_records', 'follow_up_tasks',
+        'notifications', 'announcements', 'guidance_resources', 'appointment_feedback', 'audit_logs', 'system_settings'
+    ];
+BEGIN
+    FOREACH tbl IN ARRAY tables LOOP
+        IF to_regclass('public.' || tbl) IS NULL THEN
+            CONTINUE;
+        END IF;
+        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', tbl);
+        -- Remove every existing policy on the table (the old ones all used USING (true))
+        FOR pol IN SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = tbl LOOP
+            EXECUTE format('DROP POLICY IF EXISTS %I ON %I;', pol.policyname, tbl);
+        END LOOP;
+        -- Belt and braces: the browser-facing roles get no table privileges at all
+        EXECUTE format('REVOKE ALL ON TABLE %I FROM anon, authenticated;', tbl);
+    END LOOP;
+END $$;

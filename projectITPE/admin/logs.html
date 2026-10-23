@@ -35,10 +35,10 @@
       </div>
 
       <div class="sidebar-user">
-        <div class="sidebar-avatar admin">A</div>
+        <div class="sidebar-avatar admin"></div>
         <div class="sidebar-user-info">
-          <div class="sidebar-user-name">Guidance Admin</div>
-          <div class="sidebar-user-role">SYSTEM ADMINISTRATOR</div>
+          <div class="sidebar-user-name"></div>
+          <div class="sidebar-user-role"></div>
         </div>
       </div>
 
@@ -102,30 +102,25 @@
         </div>
 
         <div class="topbar-right">
-          <div class="topbar-search">
-            <span id="icon-search"></span>
-            <input type="text" placeholder="Search audit trail...">
-          </div>
 
           <div style="position: relative;">
             <button class="topbar-icon-btn" id="topbar-notif-btn" title="Notifications">
               <span id="icon-bell"></span>
-              <span class="notif-indicator"></span>
+              <span class="notif-indicator" style="display: none;"></span>
             </button>
             <div class="notif-dropdown" id="topbar-notif-popover">
               <div class="notif-head">
                 <span>Notifications</span>
-                <span class="badge badge-brand">New</span>
               </div>
               <div class="notif-list"></div>
             </div>
           </div>
 
           <div class="topbar-user">
-            <div class="topbar-avatar admin">A</div>
+            <div class="topbar-avatar admin"></div>
             <div class="topbar-user-info">
-              <div class="u-name">Guidance Admin</div>
-              <div class="u-role">ADMINISTRATOR</div>
+              <div class="u-name"></div>
+              <div class="u-role"></div>
             </div>
           </div>
         </div>
@@ -136,7 +131,11 @@
           
           <div style="margin-bottom: 1.5rem;">
             <h2 style="font-size: var(--text-2xl); font-weight: 800; color: var(--slate-900);">Security Audit Logs</h2>
-            <p style="font-size: var(--text-sm); color: var(--slate-500); margin-top: 2px;">Immutable record of authentication events, appointment modifications, and user creation.</p>
+            <p style="font-size: var(--text-sm); color: var(--slate-500); margin-top: 2px;">The latest 200 sign-ins, bookings, status changes and account changes.</p>
+          </div>
+
+          <div class="filter-bar" style="margin-bottom: 1.25rem;">
+            <input type="search" id="log-search" class="form-input filter-search" placeholder="Search user, action or details…" aria-label="Search logs">
           </div>
 
           <div class="table-wrap">
@@ -159,10 +158,11 @@
   </div>
 
   <script src="../js/icons.js"></script>
-  <script src="../js/data.js"></script>
+  <script src="../js/utils.js"></script>
   <script src="../js/storage.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/components/toast.js"></script>
+  <script src="../js/vendor/qrcode.min.js"></script>
   <script src="../js/components/modal.js"></script>
   <script src="../js/portal.js"></script>
   <script src="admin.js"></script>
@@ -183,7 +183,6 @@
       setIcon('nav-icon-log', 'shield');
       setIcon('icon-logout', 'logOut');
       setIcon('icon-menu', 'menu');
-      setIcon('icon-search', 'search');
       setIcon('icon-bell', 'bell');
 
       AdminController.initLogs();
